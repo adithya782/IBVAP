@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Environment variables / secrets
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Node
+node_modules/
+dist/
+build/
+
+# Database / local files
+*.db
+*.sqlite
+*.sqlite3
+
+# AI model files
+*.pt
+*.onnx
+*.engine
+
+# CCTV / video files
+*.mp4
+*.avi
+*.mov
+*.mkv
+
+# Evidence / generated files
+storage/
+uploads/
+snapshots/
