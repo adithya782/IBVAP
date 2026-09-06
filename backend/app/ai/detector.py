@@ -1,311 +1,284 @@
-from ultralytics import YOLO
+import os
+from datetime import datetime
 
 import cv2
 import numpy as np
+from ultralytics import YOLO
+from sqlalchemy.orm import Session
 
-import os
-import json
-
+from app.database import SessionLocal
+from app.Model.models import Camera, Zone
 from app.services.event_service import create_intrusion_event
+from app.ai.vehicle import is_vehicle, get_vehicle_name
 
 
-# ==========================================
-# 1. LOAD YOLO MODEL
-# ==========================================
+# ============================================================
+# CONFIG
+# ============================================================
 
-model = YOLO("yolo11n.pt")
+CAMERA_NAME = "CAM-01"
+
+MODEL_PATH = "yolo11n.pt"
+
+CONFIDENCE = 0.30
+IMAGE_SIZE = 640
+
+REQUIRED_INSIDE_FRAMES = 5
+
+SNAPSHOT_DIR = "snapshots"
+
+WINDOW_NAME = "SecureStack - Border Surveillance"
 
 
-# ==========================================
-# 2. OPEN CCTV VIDEO
-# ==========================================
+# ============================================================
+# LOAD CAMERA + ZONES
+# ============================================================
 
-cap = cv2.VideoCapture("test.mp4")
+db: Session = SessionLocal()
+
+try:
+    camera = (
+        db.query(Camera)
+        .filter(Camera.name == CAMERA_NAME)
+        .first()
+    )
+
+    if not camera:
+        raise RuntimeError(
+            f"Camera '{CAMERA_NAME}' not found in database."
+        )
+
+    camera_id = camera.id
+
+    zones = (
+        db.query(Zone)
+        .filter(Zone.camera_id == camera_id)
+        .all()
+    )
+
+finally:
+    db.close()
+
+
+if not zones:
+    raise RuntimeError(
+        f"No virtual fence found for camera '{CAMERA_NAME}'. "
+        "Create one using virtual_fence.py first."
+    )
+
+
+# ============================================================
+# PREPARE ZONES
+# ============================================================
+
+zone_polygons = []
+
+for zone in zones:
+
+    coordinates = zone.coordinates
+
+    if not coordinates or "points" not in coordinates:
+        continue
+
+    points = coordinates["points"]
+
+    if len(points) < 3:
+        continue
+
+    polygon = [
+        (int(point[0]), int(point[1]))
+        for point in points
+    ]
+
+    zone_polygons.append(
+        {
+            "id": zone.id,
+            "name": zone.name,
+            "polygon": polygon,
+        }
+    )
+
+
+if not zone_polygons:
+    raise RuntimeError("No valid virtual fence polygons found.")
+
+
+# ============================================================
+# LOAD YOLO
+# ============================================================
+
+model = YOLO(MODEL_PATH)
+
+print()
+print("==============================================")
+print(" SECURESTACK IBVAP - BORDER SURVEILLANCE")
+print("==============================================")
+print(f"Camera      : {CAMERA_NAME}")
+print(f"Camera ID   : {camera_id}")
+print(f"Fences      : {len(zone_polygons)}")
+print(f"Confidence  : {CONFIDENCE}")
+print(f"Image Size  : {IMAGE_SIZE}")
+print("==============================================")
+print()
+
+
+# ============================================================
+# OPEN VIDEO / CAMERA
+# ============================================================
+
+video_source = camera.rtsp_url
+
+cap = cv2.VideoCapture(video_source)
 
 if not cap.isOpened():
-    print("ERROR: Could not open test.mp4")
-    exit()
+    raise RuntimeError(
+        f"Could not open camera/video: {video_source}"
+    )
 
 
-# ==========================================
-# 3. CREATE DISPLAY WINDOW
-# ==========================================
+# ============================================================
+# STATE
+# ============================================================
 
-window_name = "SecureStack - Intelligent Border Surveillance"
+inside_counter = {}
+
+confirmed_tracks = set()
+
+total_events = 0
+
+frame_number = 0
+
+
+# ============================================================
+# SNAPSHOT DIRECTORY
+# ============================================================
+
+os.makedirs(SNAPSHOT_DIR, exist_ok=True)
+
+
+# ============================================================
+# DISPLAY
+# ============================================================
 
 cv2.namedWindow(
-    window_name,
+    WINDOW_NAME,
     cv2.WINDOW_NORMAL
 )
 
 cv2.resizeWindow(
-    window_name,
-    1280,
-    720
+    WINDOW_NAME,
+    1100,
+    700
 )
 
 
-# ==========================================
-# 4. TRACKING SETTINGS
-# ==========================================
-
-# Number of consecutive frames a person
-# must remain inside the zone before
-# triggering an intrusion.
-
-REQUIRED_FRAMES = 5
-
-
-# Store the number of consecutive frames
-# each tracked person has remained inside.
-
-person_frames = {}
-
-
-# ==========================================
-# 5. CAMERA / SNAPSHOT SETTINGS
-# ==========================================
-
-CAMERA_ID = "CAM-01"
-
-SNAPSHOT_DIR = "snapshots"
-
-os.makedirs(
-    SNAPSHOT_DIR,
-    exist_ok=True
-)
-
-
-# ==========================================
-# 6. ACTIVE INTRUSIONS
-# ==========================================
-
-# Prevent the same tracked person from
-# creating duplicate events every frame.
-
-active_intrusions = set()
-
-
-# ==========================================
-# 7. SESSION EVENTS
-# ==========================================
-
-# Used only for displaying a final
-# session summary.
-
-events = []
-
-
-# ==========================================
-# 8. MAIN VIDEO LOOP
-# ==========================================
+# ============================================================
+# MAIN LOOP
+# ============================================================
 
 while True:
 
-    success, frame = cap.read()
+    ret, frame = cap.read()
 
-    if not success:
+    if not ret:
+        print()
+        print("Video ended / camera disconnected.")
         break
 
-
-    # ======================================
-    # GET ACTUAL VIDEO SIZE
-    # ======================================
-
-    height, width = frame.shape[:2]
+    frame_number += 1
 
 
-    # ======================================
-    # CREATE RESTRICTED ZONE
-    # ======================================
-
-    # Right-side restricted area.
-    #
-    # Percentages make the zone independent
-    # of the video's resolution.
-
-    zone = np.array([
-
-        [int(width * 0.65), int(height * 0.10)],
-
-        [int(width * 0.95), int(height * 0.10)],
-
-        [int(width * 0.95), int(height * 0.90)],
-
-        [int(width * 0.65), int(height * 0.90)]
-
-    ], np.int32)
-
-
-    # ======================================
+    # ========================================================
     # YOLO + BYTE TRACK
-    # ======================================
+    # ========================================================
 
     results = model.track(
-
         frame,
-
         persist=True,
-
         tracker="bytetrack.yaml",
 
-        # Class 0 = person
-        classes=[0],
+        # Person + car + motorcycle + bus + truck
+        classes=[0, 2, 3, 5, 7],
 
-        # Ignore weak detections
-        conf=0.60,
-
+        conf=CONFIDENCE,
+        imgsz=IMAGE_SIZE,
         verbose=False
     )
 
 
-    # ======================================
-    # DRAW YOLO DETECTIONS
-    # ======================================
+    # ========================================================
+    # DRAW VIRTUAL FENCES
+    # ========================================================
 
-    annotated_frame = results[0].plot()
+    for zone in zone_polygons:
 
+        polygon = np.array(
+            zone["polygon"],
+            dtype=np.int32
+        )
 
-    # ======================================
-    # DRAW RESTRICTED ZONE
-    # ======================================
+        cv2.polylines(
+            frame,
+            [polygon],
+            isClosed=True,
+            color=(0, 0, 255),
+            thickness=2
+        )
 
-    overlay = annotated_frame.copy()
+        x, y = zone["polygon"][0]
 
-
-    # Fill restricted area
-
-    cv2.fillPoly(
-
-        overlay,
-
-        [zone],
-
-        (0, 0, 255)
-    )
-
-
-    # Blend transparent zone
-
-    annotated_frame = cv2.addWeighted(
-
-        overlay,
-
-        0.20,
-
-        annotated_frame,
-
-        0.80,
-
-        0
-    )
-
-
-    # Draw zone boundary
-
-    cv2.polylines(
-
-        annotated_frame,
-
-        [zone],
-
-        isClosed=True,
-
-        color=(0, 0, 255),
-
-        thickness=5
-    )
-
-
-    # ======================================
-    # FENCE LABEL
-    # ======================================
-
-    cv2.putText(
-
-        annotated_frame,
-
-        "RESTRICTED ZONE",
-
-        (
-            zone[0][0] + 10,
-            zone[0][1] + 35
-        ),
-
-        cv2.FONT_HERSHEY_SIMPLEX,
-
-        0.8,
-
-        (0, 0, 255),
-
-        3
-    )
-
-
-    # ======================================
-    # INTRUSION STATUS
-    # ======================================
-
-    intrusion_detected = False
-
-
-    # ======================================
-    # CHECK TRACKED PERSONS
-    # ======================================
-
-    if results[0].boxes.id is not None:
-
-        # Bounding boxes
-
-        boxes = (
-            results[0]
-            .boxes
-            .xyxy
-            .cpu()
-            .numpy()
+        cv2.putText(
+            frame,
+            f"ZONE {zone['id']}: {zone['name']}",
+            (x, max(25, y - 10)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (0, 0, 255),
+            2
         )
 
 
-        # Track IDs
+    # ========================================================
+    # PROCESS DETECTIONS
+    # ========================================================
 
-        track_ids = (
+    if (
+        results
+        and results[0].boxes is not None
+        and results[0].boxes.id is not None
+    ):
 
-            results[0]
-            .boxes
-            .id
-            .int()
-            .cpu()
-            .tolist()
+        boxes = results[0].boxes
 
+        track_ids = boxes.id.int().cpu().tolist()
+
+        xyxy = boxes.xyxy.cpu().numpy()
+
+        confidences = boxes.conf.cpu().numpy()
+
+        class_ids = boxes.cls.int().cpu().tolist()
+
+
+        # ----------------------------------------------------
+        # PRINT TRACK IDS
+        # ----------------------------------------------------
+
+        print(
+            f"[FRAME {frame_number}] "
+            f"TRACKED IDS: {track_ids}"
         )
 
 
-        # Detection confidence
+        # ====================================================
+        # PROCESS EACH OBJECT
+        # ====================================================
 
-        confidences = (
-
-            results[0]
-            .boxes
-            .conf
-            .cpu()
-            .numpy()
-
-        )
-
-
-        # ==================================
-        # LOOP THROUGH PERSONS
-        # ==================================
-
-        for index, (box, track_id) in enumerate(
-
-            zip(boxes, track_ids)
-
+        for box, track_id, confidence, class_id in zip(
+            xyxy,
+            track_ids,
+            confidences,
+            class_ids
         ):
-
-            # ==================================
-            # BOUNDING BOX
-            # ==================================
 
             x1, y1, x2, y2 = map(
                 int,
@@ -313,421 +286,330 @@ while True:
             )
 
 
-            # ==================================
-            # PERSON'S FOOT POINT
-            # ==================================
+            # =================================================
+            # VEHICLE
+            # =================================================
 
-            # Bottom-center of bounding box.
-            #
-            # This approximates where the person
-            # is standing on the ground.
+            if is_vehicle(class_id):
 
-            foot_x = int(
-                (x1 + x2) / 2
-            )
+                vehicle_name = get_vehicle_name(class_id)
 
+                print(
+                    f"    🚗 {vehicle_name} "
+                    f"| ID={track_id} "
+                    f"| Confidence={confidence:.2f}"
+                )
+
+
+                # Vehicle box
+                cv2.rectangle(
+                    frame,
+                    (x1, y1),
+                    (x2, y2),
+                    (255, 180, 0),
+                    2
+                )
+
+
+                # Vehicle label
+                label = (
+                    f"{vehicle_name} "
+                    f"ID:{track_id} "
+                    f"{confidence:.2f}"
+                )
+
+                cv2.putText(
+                    frame,
+                    label,
+                    (x1, max(25, y1 - 10)),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.55,
+                    (255, 180, 0),
+                    2
+                )
+
+
+                continue
+
+
+            # =================================================
+            # PERSON
+            # =================================================
+
+            if class_id != 0:
+                continue
+
+
+            # -------------------------------------------------
+            # FOOT POINT
+            # -------------------------------------------------
+
+            foot_x = int((x1 + x2) / 2)
             foot_y = int(y2)
 
-
-            # Draw foot point
-
-            cv2.circle(
-
-                annotated_frame,
-
-                (foot_x, foot_y),
-
-                7,
-
-                (255, 255, 0),
-
-                -1
+            foot_point = (
+                foot_x,
+                foot_y
             )
 
 
-            # ==================================
-            # CHECK ZONE
-            # ==================================
+            # -------------------------------------------------
+            # CHECK VIRTUAL FENCES
+            # -------------------------------------------------
 
-            inside = cv2.pointPolygonTest(
+            inside_zone = None
 
-                zone,
+            for zone in zone_polygons:
 
-                (foot_x, foot_y),
+                polygon_np = np.array(
+                    zone["polygon"],
+                    dtype=np.int32
+                )
 
-                False
-            )
+                result = cv2.pointPolygonTest(
+                    polygon_np,
+                    foot_point,
+                    False
+                )
+
+                if result >= 0:
+
+                    inside_zone = zone
+
+                    break
 
 
-            # ==================================
+            # =================================================
             # PERSON INSIDE ZONE
-            # ==================================
+            # =================================================
 
-            if inside >= 0:
+            if inside_zone:
 
-                person_frames[track_id] = (
+                zone_id = inside_zone["id"]
 
-                    person_frames.get(
-                        track_id,
-                        0
-                    ) + 1
+                key = (
+                    track_id,
+                    zone_id
+                )
 
+                inside_counter[key] = (
+                    inside_counter.get(key, 0) + 1
+                )
+
+                current_frames = inside_counter[key]
+
+
+                print(
+                    f"    👤 ID={track_id} | "
+                    f"Foot={foot_point} | "
+                    f"🚨 INSIDE | "
+                    f"Zone={zone_id} | "
+                    f"Frames={current_frames}"
                 )
 
 
-            # ==================================
-            # PERSON OUTSIDE ZONE
-            # ==================================
-
-            else:
-
-                person_frames[track_id] = 0
-
-
-                # Allow the same person to
-                # trigger another event if they
-                # leave and re-enter.
-
-                active_intrusions.discard(
-                    track_id
+                # Person box - red
+                cv2.rectangle(
+                    frame,
+                    (x1, y1),
+                    (x2, y2),
+                    (0, 0, 255),
+                    2
                 )
 
 
-            # ==================================
-            # INTRUSION CONFIRMED
-            # ==================================
-
-            if person_frames.get(
-                track_id,
-                0
-            ) >= REQUIRED_FRAMES:
-
-                intrusion_detected = True
-
-
-                # ==================================
-                # CREATE EVENT ONLY ONCE
-                # ==================================
-
-                if track_id not in active_intrusions:
-
-                    # Mark this person as having
-                    # an active intrusion.
-
-                    active_intrusions.add(
-                        track_id
-                    )
+                cv2.putText(
+                    frame,
+                    f"PERSON {track_id} - INTRUSION",
+                    (x1, max(25, y1 - 10)),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    (0, 0, 255),
+                    2
+                )
 
 
-                    # ==================================
-                    # GET CONFIDENCE
-                    # ==================================
+                cv2.circle(
+                    frame,
+                    foot_point,
+                    5,
+                    (0, 0, 255),
+                    -1
+                )
 
-                    confidence = float(
-                        confidences[index]
-                    )
+
+                # =================================================
+                # CONFIRM INTRUSION
+                # =================================================
+
+                if (
+                    current_frames >= REQUIRED_INSIDE_FRAMES
+                    and key not in confirmed_tracks
+                ):
+
+                    print()
+                    print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+                    print("🚨 INTRUSION CONFIRMED")
+                    print(f"Track ID : {track_id}")
+                    print(f"Zone     : {zone_id}")
+                    print(f"Frames   : {current_frames}")
+                    print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+                    print()
 
 
-                    # ==================================
-                    # CREATE TIMESTAMP FOR FILE
-                    # ==================================
-
-                    from datetime import datetime
+                    # ------------------------------------------------
+                    # SNAPSHOT
+                    # ------------------------------------------------
 
                     timestamp = datetime.now()
 
-                    timestamp_string = (
-
-                        timestamp.strftime(
-                            "%Y%m%d_%H%M%S"
-                        )
-
-                    )
-
-
-                    # ==================================
-                    # SNAPSHOT FILENAME
-                    # ==================================
-
-                    snapshot_filename = (
-
+                    filename = (
                         f"intrusion_"
-                        f"{CAMERA_ID}_"
-                        f"{timestamp_string}_"
-                        f"ID{track_id}.jpg"
-
+                        f"{camera_id}_"
+                        f"{track_id}_"
+                        f"{timestamp.strftime('%Y%m%d_%H%M%S')}"
+                        f".jpg"
                     )
-
 
                     snapshot_path = os.path.join(
-
                         SNAPSHOT_DIR,
-
-                        snapshot_filename
-
+                        filename
                     )
-
-
-                    # ==================================
-                    # SAVE SNAPSHOT
-                    # ==================================
 
                     cv2.imwrite(
-
                         snapshot_path,
-
-                        annotated_frame
-
+                        frame
                     )
 
 
-                    # ==================================
-                    # CREATE EVENT THROUGH SERVICE
-                    # ==================================
+                    # ------------------------------------------------
+                    # DATABASE EVENT
+                    # ------------------------------------------------
 
                     event = create_intrusion_event(
-
-                        camera_id=CAMERA_ID,
-
+                        camera_id=camera_id,
                         track_id=track_id,
-
-                        confidence=confidence,
-
-                        snapshot_path=snapshot_path
-
+                        confidence=float(confidence),
+                        snapshot_path=snapshot_path,
+                        zone_id=zone_id
                     )
 
 
-                    # Keep for session summary
+                    confirmed_tracks.add(key)
 
-                    events.append(
-                        event
-                    )
+                    total_events += 1
 
 
-                    # ==================================
-                    # PRINT EVENT
-                    # ==================================
-
+                    print("✅ Event saved:")
+                    print(event)
                     print()
-                    print(
-                        "🚨 NEW INTRUSION EVENT"
-                    )
-
-                    print(
-                        json.dumps(
-                            event,
-                            indent=4
-                        )
-                    )
 
 
-                # ==================================
-                # MARK PERSON AS INTRUDER
-                # ==================================
+            # =================================================
+            # PERSON OUTSIDE ZONE
+            # =================================================
 
-                cv2.rectangle(
+            else:
 
-                    annotated_frame,
-
-                    (x1, y1),
-
-                    (x2, y2),
-
-                    (0, 0, 255),
-
-                    3
-
+                print(
+                    f"    👤 ID={track_id} | "
+                    f"Foot={foot_point} | "
+                    f"OUTSIDE"
                 )
 
 
-                # ==================================
-                # INTRUSION LABEL
-                # ==================================
+                # Reset inside counters for this track
+                for key in list(inside_counter.keys()):
+
+                    if key[0] == track_id:
+
+                        inside_counter[key] = 0
+
+
+                # Person box - green
+                cv2.rectangle(
+                    frame,
+                    (x1, y1),
+                    (x2, y2),
+                    (0, 255, 0),
+                    2
+                )
+
 
                 cv2.putText(
-
-                    annotated_frame,
-
-                    f"INTRUSION - ID {track_id}",
-
-                    (
-
-                        x1,
-
-                        max(
-                            y1 - 10,
-                            30
-                        )
-
-                    ),
-
+                    frame,
+                    f"PERSON {track_id}",
+                    (x1, max(25, y1 - 10)),
                     cv2.FONT_HERSHEY_SIMPLEX,
-
-                    0.7,
-
-                    (0, 0, 255),
-
+                    0.6,
+                    (0, 255, 0),
                     2
-
                 )
 
 
-    # ======================================
-    # DISPLAY STATUS
-    # ======================================
-
-    if intrusion_detected:
-
-        # ==================================
-        # RED ALERT BANNER
-        # ==================================
-
-        cv2.rectangle(
-
-            annotated_frame,
-
-            (0, 0),
-
-            (width, 65),
-
-            (0, 0, 255),
-
-            -1
-
-        )
+                cv2.circle(
+                    frame,
+                    foot_point,
+                    5,
+                    (0, 255, 0),
+                    -1
+                )
 
 
-        cv2.putText(
-
-            annotated_frame,
-
-            "!!! INTRUSION ALERT !!!",
-
-            (20, 45),
-
-            cv2.FONT_HERSHEY_SIMPLEX,
-
-            1.0,
-
-            (255, 255, 255),
-
-            3
-
-        )
-
-
-        print(
-            "🚨 INTRUSION ALERT!"
-        )
-
+    # ========================================================
+    # NO TRACKS
+    # ========================================================
 
     else:
 
-        # ==================================
-        # SECURE STATUS
-        # ==================================
+        if frame_number % 10 == 0:
 
-        cv2.putText(
-
-            annotated_frame,
-
-            "STATUS: SECURE",
-
-            (20, 40),
-
-            cv2.FONT_HERSHEY_SIMPLEX,
-
-            0.9,
-
-            (0, 255, 0),
-
-            3
-
-        )
+            print(
+                f"[FRAME {frame_number}] "
+                "❌ NO TRACKS"
+            )
 
 
-    # ======================================
-    # SHOW RESOLUTION
-    # ======================================
-
-    cv2.putText(
-
-        annotated_frame,
-
-        f"Frame: {width} x {height}",
-
-        (
-            20,
-            height - 20
-        ),
-
-        cv2.FONT_HERSHEY_SIMPLEX,
-
-        0.6,
-
-        (255, 255, 255),
-
-        2
-
-    )
-
-
-    # ======================================
-    # DISPLAY VIDEO
-    # ======================================
+    # ========================================================
+    # SHOW FRAME
+    # ========================================================
 
     cv2.imshow(
-
-        window_name,
-
-        annotated_frame
-
+        WINDOW_NAME,
+        frame
     )
 
 
-    # ======================================
-    # PRESS Q TO EXIT
-    # ======================================
+    # ========================================================
+    # QUIT
+    # ========================================================
 
-    if cv2.waitKey(1) & 0xFF == ord("q"):
+    key = cv2.waitKey(1) & 0xFF
 
+    if key == ord("q") or key == 27:
+        print()
+        print("Detector stopped.")
         break
 
 
-# ==========================================
+# ============================================================
 # CLEANUP
-# ==========================================
+# ============================================================
 
 cap.release()
 
 cv2.destroyAllWindows()
 
 
-# ==========================================
-# FINAL SESSION SUMMARY
-# ==========================================
+# ============================================================
+# SESSION SUMMARY
+# ============================================================
 
 print()
-print("==========================================")
-print("SECURESTACK SESSION SUMMARY")
-print("==========================================")
-
-print(
-    f"Total intrusion events: {len(events)}"
-)
-
-
-for event in events:
-
-    print(
-
-        f"- {event['event_type']} | "
-        f"Camera: {event['camera_id']} | "
-        f"Track: {event['track_id']} | "
-        f"Time: {event['timestamp']}"
-
-    )
-
-
-print("==========================================")
+print("================================================")
+print(" SESSION SUMMARY")
+print("================================================")
+print(f"Camera       : {CAMERA_NAME}")
+print(f"Fences       : {len(zone_polygons)}")
+print(f"Events       : {total_events}")
+print("================================================")
