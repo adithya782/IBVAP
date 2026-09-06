@@ -8,7 +8,8 @@ def create_intrusion_event(
     camera_id,
     track_id,
     confidence,
-    snapshot_path
+    snapshot_path,
+    zone_id = None
 ):
     """
     Create an intrusion event and store it in PostgreSQL.
@@ -25,7 +26,8 @@ def create_intrusion_event(
             confidence=round(float(confidence), 2),
             snapshot_path=snapshot_path,
             status=EventStatus.ACTIVE,
-            timestamp=datetime.now().astimezone()
+            timestamp=datetime.now().astimezone(),
+            zone_id=zone_id
         )
 
         db.add(event)
@@ -35,6 +37,7 @@ def create_intrusion_event(
         return {
             "id": event.id,
             "camera_id": event.camera_id,
+            "zone_id": event.zone_id,
             "track_id": event.track_id,
             "timestamp": event.timestamp.isoformat(),
             "event_type": event.event_type,
