@@ -49,3 +49,4 @@ build/
 storage/
 uploads/
 snapshots/
+events.json
