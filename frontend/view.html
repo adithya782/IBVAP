@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>IBVAP Console | Live Operations</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+<style>
+body { font-family: 'Inter', sans-serif; background:#080b12; }
+.mono { font-family: 'JetBrains Mono', monospace; }
+::-webkit-scrollbar { width: 7px; height: 7px; }
+::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); }
+::-webkit-scrollbar-thumb { background: rgba(16,185,129,0.35); border-radius: 4px; }
+
+@keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.35;transform:scale(.8)} }
+.pulse-dot{ animation:pulse-dot 1.5s ease-in-out infinite; }
+
+@keyframes ring { 0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.55)} 50%{box-shadow:0 0 0 6px rgba(239,68,68,0)} }
+.ring-alert{ animation:ring 1.4s ease-in-out infinite; }
+
+@keyframes slidein { from{opacity:0; transform:translateX(16px)} to{opacity:1; transform:translateX(0)} }
+.slide-in{ animation:slidein .35s ease-out both; }
+
+@keyframes fadein { from{opacity:0; transform:translateY(8px)} to{opacity:1; transform:translateY(0)} }
+.fade-in{ animation:fadein .3s ease-out both; }
+
+.zone-dash{ stroke-dasharray:7 5; animation:dashmove 1s linear infinite; }
+@keyframes dashmove{ to{ stroke-dashoffset:-24; } }
+
+.tile-scan{ animation:scanmove 3.5s linear infinite; }
+@keyframes scanmove{ 0%{top:0%} 100%{top:100%} }
+
+.nav-item.active { background: rgba(16,185,129,0.12); color:#34d399; border-left-color:#34d399; }
+.nav-item { border-left: 2px solid transparent; }
+
+.view { display:none; }
+.view.active { display:block; }
+
+input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; width:14px;height:14px;border-radius:50%;background:#34d399;cursor:pointer; }
+</style>
+</head>
+
+<body class="text-slate-200 h-screen overflow-hidden flex">
+
+<!-- ============ SIDEBAR ============ -->
+<aside class="w-[220px] flex-shrink-0 bg-[#0a0e17] border-r border-white/5 flex flex-col">
+    <div class="px-5 py-5 flex items-center gap-3 border-b border-white/5">
+        <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-lg">🛰️</div>
+        <div>
+            <div class="font-black text-white text-sm leading-tight">IBVAP</div>
+            <div class="text-[10px] mono text-slate-500">OPS CONSOLE</div>
+        </div>
+    </div>
+
+    <nav class="flex-1 py-4 space-y-1 overflow-y-auto">
+        <button data-view="overview" class="nav-item active w-full flex items-center gap-3 px-5 py-2.5 text-sm font-semibold text-slate-400 hover:text-white hover:bg-white/5 transition-colors">
+            <span class="text-lg">📡</span> Live Monitoring
+        </button>
+        <button data-view="events" class="nav-item w-full flex items-center gap-3 px-5 py-2.5 text-sm font-semibold text-slate-400 hover:text-white hover:bg-white/5 transition-colors">
+            <span class="text-lg">🗂️</span> Event Log
+        </button>
+        <button data-view="zones" class="nav-item w-full flex items-center gap-3 px-5 py-2.5 text-sm font-semibold text-slate-400 hover:text-white hover:bg-white/5 transition-colors">
+            <span class="text-lg">📐</span> Zone Config
+        </button>
+        <button data-view="anpr" class="nav-item w-full flex items-center gap-3 px-5 py-2.5 text-sm font-semibold text-slate-400 hover:text-white hover:bg-white/5 transition-colors">
+            <span class="text-lg">🔢</span> ANPR Log
+        </button>
+        <button data-view="analytics" class="nav-item w-full flex items-center gap-3 px-5 py-2.5 text-sm font-semibold text-slate-400 hover:text-white hover:bg-white/5 transition-colors">
+            <span class="text-lg">📊</span> Analytics
+        </button>
+        <button data-view="cameras" class="nav-item w-full flex items-center gap-3 px-5 py-2.5 text-sm font-semibold text-slate-400 hover:text-white hover:bg-white/5 transition-colors">
+            <span class="text-lg">🎥</span> Camera Health
+        </button>
+        <button data-view="settings" class="nav-item w-full flex items-center gap-3 px-5 py-2.5 text-sm font-semibold text-slate-400 hover:text-white hover:bg-white/5 transition-colors">
+            <span class="text-lg">⚙️</span> Alert Rules
+        </button>
+    </nav>
+
+    <div class="px-5 py-4 border-t border-white/5">
+        <div class="flex items-center gap-2 text-xs mono text-emerald-400 mb-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot"></span> ALL SYSTEMS OK
+        </div>
+        <div class="text-[10px] text-slate-600 mono">Sector 4 · BOP-Alpha</div>
+    </div>
+</aside>
+
+<!-- ============ MAIN ============ -->
+<div class="flex-1 flex flex-col min-w-0">
+
+    <!-- TOP BAR -->
+    <header class="h-16 flex-shrink-0 border-b border-white/5 bg-[#0a0e17]/60 backdrop-blur flex items-center justify-between px-6">
+        <div>
+            <h1 id="pageTitle" class="text-lg font-bold text-white">Live Monitoring</h1>
+            <div class="text-xs text-slate-500 mono" id="pageSub">6 cameras · 0 active alerts</div>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="relative hidden md:block">
+                <input placeholder="Search events, track ID, plate..." class="w-72 bg-white/5 border border-white/10 rounded-lg pl-9 pr-3 py-2 text-sm placeholder-slate-600 focus:outline-none focus:border-emerald-500/50">
+                <span class="absolute left-3 top-2.5 text-slate-500 text-sm">🔍</span>
+            </div>
+            <button id="bellBtn" class="relative w-10 h-10 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors">
+                🔔
+                <span id="bellBadge" class="hidden absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">0</span>
+            </button>
+            <div class="flex items-center gap-2 pl-4 border-l border-white/10">
+                <div class="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-cyan-500 flex items-center justify-center text-sm font-bold">OP</div>
+                <div class="hidden lg:block">
+                    <div class="text-xs font-bold text-white leading-tight">Operator Singh</div>
+                    <div class="text-[10px] text-slate-500">Duty Shift B</div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- CONTENT SCROLL AREA -->
+    <main class="flex-1 overflow-y-auto p-6">
+
+        <!-- ================= OVERVIEW / LIVE MONITORING ================= -->
+        <div id="view-overview" class="view active">
+            <div class="grid grid-cols-1 xl:grid-cols-4 gap-5">
+
+                <!-- Camera grid -->
+                <div class="xl:col-span-3 grid grid-cols-2 lg:grid-cols-3 gap-4" id="cameraGrid">
+                    <!-- generated by JS -->
+                </div>
+
+                <!-- Right: alerts + quick stats -->
+                <div class="space-y-4">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="bg-white/[0.03] border border-white/10 rounded-xl p-4">
+                            <div class="text-[10px] text-slate-500 uppercase mono mb-1">Cameras Online</div>
+                            <div class="text-2xl font-black text-emerald-400">6/6</div>
+                        </div>
+                        <div class="bg-white/[0.03] border border-white/10 rounded-xl p-4">
+                            <div class="text-[10px] text-slate-500 uppercase mono mb-1">Tracks Now</div>
+                            <div class="text-2xl font-black text-cyan-400" id="trackCount">7</div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white/[0.03] border border-white/10 rounded-xl p-4">
+                        <div class="flex justify-between items-center mb-3">
+                            <div class="font-bold text-white text-sm">Live Alerts</div>
+                            <span id="alertCountPill" class="text-[10px] mono px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400">0 active</span>
+                        </div>
+                        <div id="liveAlerts" class="space-y-2 min-h-[100px] max-h-[340px] overflow-y-auto">
+                            <div class="text-sm text-slate-600 text-center py-8">No active alerts.<br>System nominal.</div>
+                        </div>
+                    </div>
+
+                    <button onclick="simulateAlert()" class="w-full py-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 font-bold text-sm hover:bg-red-500/20 transition-colors">
+                        ⚠ Simulate Zone Intrusion
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= EVENT LOG ================= -->
+        <div id="view-events" class="view">
+            <div class="flex flex-wrap gap-3 mb-5">
+                <select class="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm">
+                    <option>All Cameras</option>
+                    <option>CAM-01 Sector 4</option>
+                    <option>CAM-02 North Gate</option>
+                    <option>CAM-03 River Bend</option>
+                </select>
+                <select class="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm">
+                    <option>All Event Types</option>
+                    <option>Intrusion</option>
+                    <option>Vehicle Approach</option>
+                    <option>Loitering</option>
+                </select>
+                <input type="date" class="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm">
+                <button class="ml-auto px-4 py-2 rounded-lg bg-emerald-500/15 text-emerald-400 text-sm font-bold hover:bg-emerald-500/25 transition-colors">Export CSV</button>
+            </div>
+
+            <div class="bg-white/[0.03] border border-white/10 rounded-xl overflow-hidden">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-left text-slate-500 text-xs uppercase border-b border-white/10">
+                            <th class="px-4 py-3 font-semibold">Snapshot</th>
+                            <th class="px-4 py-3 font-semibold">Event</th>
+                            <th class="px-4 py-3 font-semibold">Camera</th>
+                            <th class="px-4 py-3 font-semibold">Track ID</th>
+                            <th class="px-4 py-3 font-semibold">Timestamp</th>
+                            <th class="px-4 py-3 font-semibold">Status</th>
+                            <th class="px-4 py-3 font-semibold"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="eventTableBody">
+                        <!-- rows injected -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ================= ZONE CONFIG ================= -->
+        <div id="view-zones" class="view">
+            <div class="grid lg:grid-cols-3 gap-6">
+                <div class="lg:col-span-2 bg-white/[0.03] border border-white/10 rounded-xl p-4">
+                    <div class="flex justify-between items-center mb-3">
+                        <div class="font-bold text-white text-sm">Draw Restricted Zone — CAM-01 Sector 4</div>
+                        <div class="flex gap-2">
+                            <button onclick="clearZoneDraft()" class="px-3 py-1.5 rounded-lg bg-white/5 text-xs font-bold hover:bg-white/10">Clear</button>
+                            <button onclick="saveZone()" class="px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 text-xs font-bold hover:bg-emerald-500/30">Save Zone</button>
+                        </div>
+                    </div>
+                    <div class="text-xs text-slate-500 mb-3">Click on the feed to place polygon points. Minimum 3 points to save.</div>
+                    <svg id="zoneCanvas" viewBox="0 0 800 450" class="w-full rounded-lg bg-[#020408] cursor-crosshair border border-white/10">
+                        <defs>
+                            <linearGradient id="skyz" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="#0a1420"/><stop offset="100%" stop-color="#050a10"/>
+                            </linearGradient>
+                        </defs>
+                        <rect width="800" height="450" fill="url(#skyz)"/>
+                        <g stroke="#10b98122" stroke-width="1">
+                            <line x1="0" y1="450" x2="300" y2="220"/><line x1="800" y1="450" x2="500" y2="220"/>
+                            <line x1="0" y1="380" x2="800" y2="380"/><line x1="160" y1="280" x2="640" y2="280"/>
+                        </g>
+                        <polygon id="zonePreview" points="" fill="#ef444420" stroke="#ef4444" stroke-width="2" class="zone-dash"/>
+                        <g id="zonePoints"></g>
+                    </svg>
+                </div>
+
+                <div class="bg-white/[0.03] border border-white/10 rounded-xl p-4">
+                    <div class="font-bold text-white text-sm mb-3">Saved Zones</div>
+                    <div id="savedZonesList" class="space-y-2">
+                        <div class="p-3 rounded-lg bg-white/5 border border-white/10">
+                            <div class="flex justify-between text-sm font-bold text-white mb-1">
+                                <span>North Perimeter</span>
+                                <span class="text-red-400 text-xs mono">ACTIVE</span>
+                            </div>
+                            <div class="text-xs text-slate-500">CAM-01 · 4 points · Trigger: person, vehicle</div>
+                        </div>
+                    </div>
+
+                    <div class="mt-5 pt-5 border-t border-white/10">
+                        <div class="text-xs font-bold text-slate-400 uppercase mb-2">Trigger Classes</div>
+                        <label class="flex items-center gap-2 text-sm mb-2"><input type="checkbox" checked class="accent-emerald-500"> Person</label>
+                        <label class="flex items-center gap-2 text-sm mb-2"><input type="checkbox" checked class="accent-emerald-500"> Vehicle</label>
+                        <label class="flex items-center gap-2 text-sm"><input type="checkbox" class="accent-emerald-500"> Animal</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= ANPR LOG ================= -->
+        <div id="view-anpr" class="view">
+            <div class="bg-white/[0.03] border border-white/10 rounded-xl overflow-hidden">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-left text-slate-500 text-xs uppercase border-b border-white/10">
+                            <th class="px-4 py-3 font-semibold">Plate</th>
+                            <th class="px-4 py-3 font-semibold">Camera</th>
+                            <th class="px-4 py-3 font-semibold">Confidence</th>
+                            <th class="px-4 py-3 font-semibold">Timestamp</th>
+                            <th class="px-4 py-3 font-semibold">Direction</th>
+                        </tr>
+                    </thead>
+                    <tbody class="mono">
+                        <tr class="border-b border-white/5"><td class="px-4 py-3 font-bold text-white">PB09 AK 4471</td><td class="px-4 py-3 text-slate-400">CAM-03</td><td class="px-4 py-3 text-emerald-400">96.4%</td><td class="px-4 py-3 text-slate-500">22:31:42</td><td class="px-4 py-3 text-slate-400">Inbound</td></tr>
+                        <tr class="border-b border-white/5"><td class="px-4 py-3 font-bold text-white">HR26 BQ 1123</td><td class="px-4 py-3 text-slate-400">CAM-02</td><td class="px-4 py-3 text-emerald-400">91.2%</td><td class="px-4 py-3 text-slate-500">22:14:09</td><td class="px-4 py-3 text-slate-400">Outbound</td></tr>
+                        <tr><td class="px-4 py-3 font-bold text-white">DL3C AX 7790</td><td class="px-4 py-3 text-slate-400">CAM-03</td><td class="px-4 py-3 text-yellow-400">78.9%</td><td class="px-4 py-3 text-slate-500">21:58:51</td><td class="px-4 py-3 text-slate-400">Inbound</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ================= ANALYTICS ================= -->
+        <div id="view-analytics" class="view">
+            <div class="grid sm:grid-cols-3 gap-4 mb-6">
+                <div class="bg-white/[0.03] border border-white/10 rounded-xl p-5">
+                    <div class="text-xs text-slate-500 uppercase mono mb-2">Events Today</div>
+                    <div class="text-3xl font-black text-white">18</div>
+                    <div class="text-xs text-emerald-400 mt-1">↑ 4 vs yesterday</div>
+                </div>
+                <div class="bg-white/[0.03] border border-white/10 rounded-xl p-5">
+                    <div class="text-xs text-slate-500 uppercase mono mb-2">Avg Response Time</div>
+                    <div class="text-3xl font-black text-white">8.2s</div>
+                    <div class="text-xs text-emerald-400 mt-1">↓ 1.1s improved</div>
+                </div>
+                <div class="bg-white/[0.03] border border-white/10 rounded-xl p-5">
+                    <div class="text-xs text-slate-500 uppercase mono mb-2">False Alarm Rate</div>
+                    <div class="text-3xl font-black text-white">3.1%</div>
+                    <div class="text-xs text-slate-500 mt-1">Within target</div>
+                </div>
+            </div>
+
+            <div class="bg-white/[0.03] border border-white/10 rounded-xl p-5">
+                <div class="font-bold text-white text-sm mb-4">Events by Hour (Last 24h)</div>
+                <div class="flex items-end gap-2 h-40">
+                    <script>document.write('')</script>
+                </div>
+                <div id="barChart" class="flex items-end gap-2 h-40"></div>
+            </div>
+        </div>
+
+        <!-- ================= CAMERA HEALTH ================= -->
+        <div id="view-cameras" class="view">
+            <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div class="bg-white/[0.03] border border-white/10 rounded-xl p-4" id="camHealthTemplate"></div>
+            </div>
+            <div id="camHealthGrid" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+        </div>
+
+        <!-- ================= ALERT RULES / SETTINGS ================= -->
+        <div id="view-settings" class="view">
+            <div class="max-w-2xl bg-white/[0.03] border border-white/10 rounded-xl p-6 space-y-5">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="font-bold text-white text-sm">Intrusion Alerts</div>
+                        <div class="text-xs text-slate-500">Notify on outside→inside zone crossing</div>
+                    </div>
+                    <button class="w-11 h-6 rounded-full bg-emerald-500 relative"><span class="absolute right-0.5 top-0.5 w-5 h-5 bg-white rounded-full"></span></button>
+                </div>
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="font-bold text-white text-sm">Vehicle Approach Alerts</div>
+                        <div class="text-xs text-slate-500">Notify when vehicle nears boundary</div>
+                    </div>
+                    <button class="w-11 h-6 rounded-full bg-emerald-500 relative"><span class="absolute right-0.5 top-0.5 w-5 h-5 bg-white rounded-full"></span></button>
+                </div>
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="font-bold text-white text-sm">Night Mode Sensitivity</div>
+                        <div class="text-xs text-slate-500">Adjust detection threshold in low light</div>
+                    </div>
+                </div>
+                <input type="range" class="w-full accent-emerald-500">
+
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="font-bold text-white text-sm">Alert Cooldown</div>
+                        <div class="text-xs text-slate-500">Minimum seconds between repeat alerts (same track)</div>
+                    </div>
+                    <input value="30s" class="w-20 bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-sm text-center">
+                </div>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<script>
+/* ---------------- NAV SWITCHING ---------------- */
+const titles = {
+    overview: ["Live Monitoring", "6 cameras · 0 active alerts"],
+    events: ["Event Log", "History of all detected events"],
+    zones: ["Zone Configuration", "Define virtual fences per camera"],
+    anpr: ["ANPR Log", "Automatic number plate recognition results"],
+    analytics: ["Analytics", "Operational performance metrics"],
+    cameras: ["Camera Health", "Feed status and diagnostics"],
+    settings: ["Alert Rules", "Configure detection sensitivity and notifications"]
+};
+
+document.querySelectorAll('.nav-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const v = btn.dataset.view;
+        document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+        document.getElementById('view-' + v).classList.add('active');
+        document.getElementById('pageTitle').textContent = titles[v][0];
+        document.getElementById('pageSub').textContent = titles[v][1];
+    });
+});
+
+/* ---------------- CAMERA GRID ---------------- */
+const cams = [
+    {id:'CAM-01', name:'Sector 4', status:'ok'},
+    {id:'CAM-02', name:'North Gate', status:'ok'},
+    {id:'CAM-03', name:'River Bend', status:'ok'},
+    {id:'CAM-04', name:'East Ridge', status:'ok'},
+    {id:'CAM-05', name:'Watch Tower', status:'weak'},
+    {id:'CAM-06', name:'South Fence', status:'ok'},
+];
+
+function renderCameraGrid() {
+    const grid = document.getElementById('cameraGrid');
+    grid.innerHTML = cams.map((c,i) => `
+        <div class="relative bg-black rounded-xl overflow-hidden border border-white/10 group cam-tile" data-cam="${c.id}">
+            <div class="absolute top-2 left-2 z-10 flex items-center gap-1.5 bg-black/50 backdrop-blur px-2 py-1 rounded-md">
+                <span class="w-1.5 h-1.5 rounded-full ${c.status==='ok'?'bg-emerald-400':'bg-yellow-400'} pulse-dot"></span>
+                <span class="text-[10px] mono text-white">${c.id}</span>
+            </div>
+            <div class="absolute top-2 right-2 z-10 text-[10px] mono text-slate-400 bg-black/50 px-2 py-1 rounded-md">${c.name}</div>
+            <svg viewBox="0 0 400 225" class="w-full aspect-video">
+                <rect width="400" height="225" fill="#0a1218"/>
+                <g stroke="#10b98118" stroke-width="1">
+                    <line x1="0" y1="225" x2="150" y2="110"/><line x1="400" y1="225" x2="250" y2="110"/>
+                    <line x1="0" y1="190" x2="400" y2="190"/>
+                </g>
+                <rect x="${40+i*15}" y="145" width="16" height="34" fill="none" stroke="#22d3ee" stroke-width="1.5" rx="1"/>
+            </svg>
+            <div class="absolute left-0 right-0 h-px bg-emerald-400/25 tile-scan"></div>
+            <div class="absolute inset-0 border-2 border-transparent group-hover:border-emerald-500/40 transition-colors"></div>
+        </div>
+    `).join('');
+}
+renderCameraGrid();
+
+/* ---------------- LIVE ALERTS SIMULATION ---------------- */
+let alertSeq = 0;
+function simulateAlert() {
+    alertSeq++;
+    const cam = cams[Math.floor(Math.random()*cams.length)];
+    const trackId = Math.floor(Math.random()*40)+1;
+    const now = new Date().toTimeString().split(' ')[0];
+
+    // flash the relevant camera tile
+    const tile = document.querySelector(`.cam-tile[data-cam="${cam.id}"]`);
+    if (tile) {
+        tile.classList.add('ring-2','ring-red-500','ring-alert');
+        setTimeout(()=> tile.classList.remove('ring-2','ring-red-500','ring-alert'), 4000);
+    }
+
+    const alertsWrap = document.getElementById('liveAlerts');
+    if (alertsWrap.children.length === 1 && alertsWrap.children[0].tagName !== 'DIV') {} 
+    if (alertsWrap.textContent.includes('No active alerts')) alertsWrap.innerHTML = '';
+
+    const el = document.createElement('div');
+    el.className = 'slide-in flex items-center gap-3 p-3 rounded-lg bg-red-500/10 border border-red-500/25';
+    el.id = 'alert-' + alertSeq;
+    el.innerHTML = `
+        <span class="w-2 h-2 rounded-full bg-red-500 pulse-dot flex-shrink-0"></span>
+        <div class="flex-1 min-w-0">
+            <div class="text-sm font-bold text-red-400">INTRUSION · ${cam.id}</div>
+            <div class="text-xs text-slate-500 mono">Track ID:${trackId} · person · ${now}</div>
+        </div>
+        <button onclick="acknowledgeAlert(${alertSeq}, '${cam.id}', ${trackId}, '${now}')" class="text-xs font-bold px-2.5 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white flex-shrink-0">Ack</button>
+    `;
+    alertsWrap.prepend(el);
+    updateAlertCounts();
+
+    // bell badge
+    const badge = document.getElementById('bellBadge');
+    badge.classList.remove('hidden');
+    badge.textContent = alertsWrap.children.length;
+}
+
+function updateAlertCounts() {
+    const count = document.getElementById('liveAlerts').children.length;
+    const pill = document.getElementById('alertCountPill');
+    pill.textContent = count + ' active';
+    if (count > 0) {
+        pill.classList.remove('bg-emerald-500/15','text-emerald-400');
+        pill.classList.add('bg-red-500/15','text-red-400');
+    } else {
+        pill.classList.add('bg-emerald-500/15','text-emerald-400');
+        pill.classList.remove('bg-red-500/15','text-red-400');
+    }
+}
+
+function acknowledgeAlert(id, camId, trackId, time) {
+    const el = document.getElementById('alert-' + id);
+    if (el) el.remove();
+
+    const alertsWrap = document.getElementById('liveAlerts');
+    if (alertsWrap.children.length === 0) {
+        alertsWrap.innerHTML = '<div class="text-sm text-slate-600 text-center py-8">No active alerts.<br>System nominal.</div>';
+        document.getElementById('bellBadge').classList.add('hidden');
+    } else {
+        document.getElementById('bellBadge').textContent = alertsWrap.children.length;
+    }
+    updateAlertCounts();
+
+    // push into event log
+    addEventRow(camId, trackId, time);
+}
+
+/* ---------------- EVENT LOG TABLE ---------------- */
+let eventRowSeq = 0;
+function addEventRow(camId, trackId, time) {
+    eventRowSeq++;
+    const tbody = document.getElementById('eventTableBody');
+    const tr = document.createElement('tr');
+    tr.className = 'border-b border-white/5 hover:bg-white/[0.02] fade-in';
+    tr.innerHTML = `
+        <td class="px-4 py-3"><div class="w-14 h-9 rounded bg-slate-800 flex items-center justify-center text-xs">🖼️</div></td>
+        <td class="px-4 py-3 font-bold text-red-400 text-xs">INTRUSION</td>
+        <td class="px-4 py-3 text-slate-300 mono text-xs">${camId}</td>
+        <td class="px-4 py-3 text-slate-300 mono text-xs">#${trackId}</td>
+        <td class="px-4 py-3 text-slate-500 mono text-xs">${time}</td>
+        <td class="px-4 py-3"><span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-bold">Acknowledged</span></td>
+        <td class="px-4 py-3"><button class="text-xs text-cyan-400 hover:underline">View</button></td>
+    `;
+    tbody.prepend(tr);
+}
+// seed a couple of example rows
+addEventRow('CAM-02','11','21:40:02');
+addEventRow('CAM-01','09','20:12:47');
+
+/* ---------------- ZONE DRAWING ---------------- */
+let zonePoints = [];
+const svgNS = "http://www.w3.org/2000/svg";
+document.getElementById('zoneCanvas').addEventListener('click', (e) => {
+    const svg = document.getElementById('zoneCanvas');
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX; pt.y = e.clientY;
+    const loc = pt.matrixTransform(svg.getScreenCTM().inverse());
+    zonePoints.push([Math.round(loc.x), Math.round(loc.y)]);
+    renderZoneDraft();
+});
+
+function renderZoneDraft() {
+    document.getElementById('zonePreview').setAttribute('points', zonePoints.map(p=>p.join(',')).join(' '));
+    const g = document.getElementById('zonePoints');
+    g.innerHTML = zonePoints.map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="#ef4444"/>`).join('');
+}
+
+function clearZoneDraft() {
+    zonePoints = [];
+    renderZoneDraft();
+}
+
+function saveZone() {
+    if (zonePoints.length < 3) { alert('Add at least 3 points to define a zone.'); return; }
+    const list = document.getElementById('savedZonesList');
+    const div = document.createElement('div');
+    div.className = 'p-3 rounded-lg bg-white/5 border border-white/10 fade-in';
+    div.innerHTML = `
+        <div class="flex justify-between text-sm font-bold text-white mb-1">
+            <span>Zone ${list.children.length + 1}</span>
+            <span class="text-emerald-400 text-xs mono">SAVED</span>
+        </div>
+        <div class="text-xs text-slate-500">CAM-01 · ${zonePoints.length} points · Trigger: person, vehicle</div>
+    `;
+    list.appendChild(div);
+    clearZoneDraft();
+}
+
+/* ---------------- ANALYTICS BAR CHART ---------------- */
+const barChart = document.getElementById('barChart');
+const hours = Array.from({length:24}, (_,i)=>i);
+const data = hours.map(()=> Math.floor(Math.random()*40)+5);
+const max = Math.max(...data);
+barChart.innerHTML = data.map((v,i) => `
+    <div class="flex-1 flex flex-col items-center gap-1 group">
+        <div class="w-full bg-gradient-to-t from-emerald-500/70 to-teal-400/70 rounded-t hover:from-emerald-400 hover:to-teal-300 transition-colors" style="height:${(v/max)*100}%"></div>
+        ${i % 4 === 0 ? `<span class="text-[9px] text-slate-600 mono">${i}h</span>` : ''}
+    </div>
+`).join('');
+
+/* ---------------- CAMERA HEALTH ---------------- */
+document.getElementById('camHealthTemplate').remove();
+const healthGrid = document.getElementById('camHealthGrid');
+healthGrid.innerHTML = cams.map(c => `
+    <div class="bg-white/[0.03] border border-white/10 rounded-xl p-4">
+        <div class="flex justify-between items-center mb-3">
+            <div class="font-bold text-white text-sm">${c.id} · ${c.name}</div>
+            <span class="w-2 h-2 rounded-full ${c.status==='ok'?'bg-emerald-400':'bg-yellow-400'} pulse-dot"></span>
+        </div>
+        <div class="space-y-2 text-xs">
+            <div class="flex justify-between text-slate-500"><span>Stream</span><span class="text-emerald-400 font-bold">${c.status==='ok'?'Stable':'Weak Signal'}</span></div>
+            <div class="flex justify-between text-slate-500"><span>FPS</span><span class="text-slate-300 mono">${c.status==='ok'?'27':'14'}</span></div>
+            <div class="flex justify-between text-slate-500"><span>Latency</span><span class="text-slate-300 mono">${c.status==='ok'?'120ms':'480ms'}</span></div>
+            <div class="flex justify-between text-slate-500"><span>Storage</span><span class="text-slate-300 mono">68% used</span></div>
+        </div>
+    </div>
+`).join('');
+</script>
+
+</body>
+</html>

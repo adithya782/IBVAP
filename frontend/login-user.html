@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>IBVAP | Secure Access</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+<style>
+body { font-family: 'Inter', sans-serif; background:#050810; }
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+.grid-bg {
+    background-image: 
+        linear-gradient(rgba(16, 185, 129, 0.07) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(16, 185, 129, 0.07) 1px, transparent 1px);
+    background-size: 42px 42px;
+}
+
+@keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.35;transform:scale(.8)} }
+.pulse-dot{ animation:pulse-dot 1.6s ease-in-out infinite; }
+
+.radar-sweep {
+    background: conic-gradient(from 0deg, transparent 0deg, rgba(16,185,129,0.4) 15deg, transparent 45deg);
+    animation: sweep 5s linear infinite;
+}
+@keyframes sweep { to { transform: rotate(360deg); } }
+
+@keyframes scan-line { 0%{top:0%} 100%{top:100%} }
+.scan-line{ animation: scan-line 4s linear infinite; }
+
+@keyframes fadeInUp { from{opacity:0; transform:translateY(20px)} to{opacity:1; transform:translateY(0)} }
+.fade-up{ animation: fadeInUp .6s ease-out both; }
+
+@keyframes shake {
+    10%,90%{ transform:translateX(-1px); }
+    20%,80%{ transform:translateX(2px); }
+    30%,50%,70%{ transform:translateX(-4px); }
+    40%,60%{ transform:translateX(4px); }
+}
+.shake{ animation: shake .5s; }
+
+.glass { background: rgba(255,255,255,0.03); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08); }
+.glow { box-shadow: 0 0 60px -12px rgba(16,185,129,0.35); }
+
+input:-webkit-autofill {
+    -webkit-box-shadow: 0 0 0 1000px #0a0e17 inset !important;
+    -webkit-text-fill-color: #fff !important;
+}
+
+.spinner {
+    border: 2px solid rgba(255,255,255,0.2);
+    border-top-color: #050810;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+
+<body class="min-h-screen grid-bg text-slate-200 relative overflow-hidden flex items-center justify-center px-4">
+
+<!-- Ambient glow -->
+<div class="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#050810]"></div>
+<div class="absolute -top-40 -left-40 w-96 h-96 bg-emerald-600/10 rounded-full blur-3xl"></div>
+<div class="absolute -bottom-40 -right-40 w-96 h-96 bg-teal-600/10 rounded-full blur-3xl"></div>
+
+<!-- Decorative radar (desktop only) -->
+<div class="absolute right-[8%] top-1/2 -translate-y-1/2 w-[420px] h-[420px] rounded-full border border-emerald-500/10 hidden xl:block pointer-events-none">
+    <div class="absolute inset-10 rounded-full border border-emerald-500/10"></div>
+    <div class="absolute inset-20 rounded-full border border-emerald-500/10"></div>
+    <div class="absolute inset-0 rounded-full overflow-hidden radar-sweep"></div>
+    <span class="absolute top-[30%] left-[62%] w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot"></span>
+    <span class="absolute top-[55%] left-[40%] w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot" style="animation-delay:.6s"></span>
+</div>
+
+<!-- ============ LOGIN CARD ============ -->
+<div class="relative z-10 w-full max-w-md fade-up">
+
+    <!-- Brand -->
+    <div class="flex flex-col items-center mb-8">
+        <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-3xl glow mb-4">
+            🛰️
+        </div>
+        <div class="text-2xl font-black text-white tracking-tight">IBVAP</div>
+        <div class="text-xs mono text-emerald-400 tracking-widest mt-1">INTELLIGENT BORDER VIDEO ANALYTICS</div>
+    </div>
+
+    <!-- Card -->
+    <div class="glass rounded-2xl p-8" id="loginCard">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h1 class="text-xl font-bold text-white">Secure Operator Access</h1>
+                <p class="text-xs text-slate-500 mt-1">Authenticate to access the live console</p>
+            </div>
+            <div class="flex items-center gap-1.5 text-[10px] mono text-emerald-400 bg-emerald-500/10 px-2.5 py-1.5 rounded-full flex-shrink-0">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot"></span> SECURE
+            </div>
+        </div>
+
+        <form id="loginForm" class="space-y-4" onsubmit="return false;">
+            <!-- Operator ID -->
+            <div>
+                <label class="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">Operator ID</label>
+                <div class="relative">
+                    <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-sm">🪪</span>
+                    <input id="operatorId" type="text" placeholder="e.g. OPR-2291" autocomplete="username"
+                        class="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-slate-600 mono focus:outline-none focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/20 transition-all duration-300">
+                </div>
+            </div>
+
+            <!-- Password -->
+            <div>
+                <label class="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">Password</label>
+                <div class="relative">
+                    <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-sm">🔒</span>
+                    <input id="password" type="password" placeholder="••••••••••" autocomplete="current-password"
+                        class="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-11 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/20 transition-all duration-300">
+                    <button type="button" onclick="togglePassword()" id="toggleBtn" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-sm transition-colors">
+                        👁️
+                    </button>
+                </div>
+            </div>
+
+            <!-- Duty station select -->
+            <div>
+                <label class="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">Duty Station</label>
+                <select id="station" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/20 transition-all duration-300">
+                    <option class="bg-[#0a0e17]">BOP-Alpha · Sector 4</option>
+                    <option class="bg-[#0a0e17]">BOP-Bravo · North Ridge</option>
+                    <option class="bg-[#0a0e17]">BOP-Charlie · River Bend</option>
+                </select>
+            </div>
+
+            <!-- Options row -->
+            <div class="flex items-center justify-between text-xs pt-1">
+                <label class="flex items-center gap-2 text-slate-400 cursor-pointer">
+                    <input type="checkbox" class="accent-emerald-500 w-3.5 h-3.5"> Remember this device
+                </label>
+                <a href="#" class="text-emerald-400 hover:text-emerald-300 font-semibold">Forgot access?</a>
+            </div>
+
+            <!-- Error message -->
+            <div id="errorMsg" class="hidden text-xs text-red-400 bg-red-500/10 border border-red-500/25 rounded-lg px-3 py-2.5">
+                ⚠ Invalid Operator ID or password. Access attempt logged.
+            </div>
+
+            <!-- Submit -->
+            <button id="submitBtn" onclick="handleLogin()" type="button"
+                class="w-full bg-gradient-to-r from-emerald-500 to-teal-500 text-[#050810] font-bold py-3.5 rounded-xl hover:shadow-xl hover:shadow-emerald-500/25 hover:scale-[1.02] active:scale-100 transition-all duration-300 flex items-center justify-center gap-2 mt-2">
+                <span id="btnText">Authenticate & Enter Console</span>
+            </button>
+        </form>
+
+        <div class="mt-6 pt-5 border-t border-white/10 flex items-center justify-center gap-4 text-[10px] mono text-slate-600">
+            <span>🔐 AES-256</span>
+            <span>·</span>
+            <span>2FA ENFORCED</span>
+            <span>·</span>
+            <span>AUDIT LOGGED</span>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="text-center mt-6 text-xs text-slate-600 mono">
+        SIH 2026 · Problem Statement #26187 · Unauthorized access is a punishable offense
+    </div>
+</div>
+
+<script>
+function togglePassword() {
+    const pw = document.getElementById('password');
+    const btn = document.getElementById('toggleBtn');
+    if (pw.type === 'password') {
+        pw.type = 'text';
+        btn.textContent = '🙈';
+    } else {
+        pw.type = 'password';
+        btn.textContent = '👁️';
+    }
+}
+
+function handleLogin() {
+    const id = document.getElementById('operatorId').value.trim();
+    const pw = document.getElementById('password').value.trim();
+    const errorMsg = document.getElementById('errorMsg');
+    const card = document.getElementById('loginCard');
+    const btn = document.getElementById('submitBtn');
+    const btnText = document.getElementById('btnText');
+
+    errorMsg.classList.add('hidden');
+
+    if (!id || !pw) {
+        errorMsg.textContent = '⚠ Please enter both Operator ID and password.';
+        errorMsg.classList.remove('hidden');
+        card.classList.add('shake');
+        setTimeout(()=> card.classList.remove('shake'), 500);
+        return;
+    }
+
+    // Loading state
+    btn.disabled = true;
+    btn.classList.add('opacity-80', 'cursor-wait');
+    btnText.innerHTML = '<span class="inline-block w-4 h-4 spinner align-middle"></span> Verifying credentials...';
+
+    setTimeout(() => {
+        // Demo: accept any non-empty credentials
+        btnText.textContent = '✓ Access Granted — Redirecting...';
+        btn.classList.remove('from-emerald-500','to-teal-500');
+        btn.classList.add('bg-emerald-400');
+        
+        setTimeout(() => {
+            // In production: window.location.href = "console.html";
+            alert('Redirecting to Live Console...\n(connect this to your console.html / backend auth)');
+            btn.disabled = false;
+            btn.classList.remove('opacity-80','cursor-wait','bg-emerald-400');
+            btn.classList.add('from-emerald-500','to-teal-500');
+            btnText.textContent = 'Authenticate & Enter Console';
+        }, 1200);
+    }, 1400);
+}
+
+// Allow Enter key to submit
+document.getElementById('password').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') handleLogin();
+});
+document.getElementById('operatorId').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') handleLogin();
+});
+</script>
+
+</body>
+</html>
