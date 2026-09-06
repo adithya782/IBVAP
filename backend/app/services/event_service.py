@@ -1,9 +1,7 @@
 from datetime import datetime
-import json
-import os
 
-
-EVENTS_FILE = "events.json"
+from app.database import SessionLocal
+from app.Model.models import Event, EventStatus, Severity
 
 
 def create_intrusion_event(
@@ -13,51 +11,38 @@ def create_intrusion_event(
     snapshot_path
 ):
     """
-    Create a standardized intrusion event.
+    Create an intrusion event and store it in PostgreSQL.
     """
 
-    event = {
-        "camera_id": camera_id,
-        "track_id": int(track_id),
-        "timestamp": datetime.now().isoformat(),
-        "event_type": "INTRUSION",
-        "severity": "CRITICAL",
-        "confidence": round(float(confidence), 2),
-        "snapshot": snapshot_path,
-        "status": "NEW"
-    }
+    db = SessionLocal()
 
-    # --------------------------------------
-    # TEMPORARY STORAGE
-    # --------------------------------------
-    # For now we store events in JSON.
-    # PostgreSQL will replace this later.
-
-    events = []
-
-    if os.path.exists(EVENTS_FILE):
-
-        try:
-
-            with open(EVENTS_FILE, "r") as file:
-                events = json.load(file)
-
-        except (json.JSONDecodeError, FileNotFoundError):
-
-            events = []
-
-    # Generate simple event ID
-
-    event["id"] = len(events) + 1
-
-    events.append(event)
-
-    with open(EVENTS_FILE, "w") as file:
-
-        json.dump(
-            events,
-            file,
-            indent=4
+    try:
+        event = Event(
+            camera_id=camera_id,
+            track_id=int(track_id),
+            event_type="INTRUSION",
+            severity=Severity.CRITICAL,
+            confidence=round(float(confidence), 2),
+            snapshot_path=snapshot_path,
+            status=EventStatus.ACTIVE,
+            timestamp=datetime.now().astimezone()
         )
 
-    return event
+        db.add(event)
+        db.commit()
+        db.refresh(event)
+
+        return {
+            "id": event.id,
+            "camera_id": event.camera_id,
+            "track_id": event.track_id,
+            "timestamp": event.timestamp.isoformat(),
+            "event_type": event.event_type,
+            "severity": event.severity.value,
+            "confidence": event.confidence,
+            "snapshot_path": event.snapshot_path,
+            "status": event.status.value
+        }
+
+    finally:
+        db.close()

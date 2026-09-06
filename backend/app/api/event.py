@@ -1,7 +1,8 @@
-from fastapi import APIRouter
-import json
-import os
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.orm import Session
 
+from app.database import get_db
+from app.Model.models import Event
 
 router = APIRouter(
     prefix="/events",
@@ -9,52 +10,46 @@ router = APIRouter(
 )
 
 
-EVENTS_FILE = "events.json"
-
-
-# ==========================================
-# LOAD EVENTS
-# ==========================================
-
-def load_events():
-
-    if not os.path.exists(EVENTS_FILE):
-        return []
-
-    try:
-
-        with open(EVENTS_FILE, "r") as file:
-            return json.load(file)
-
-    except json.JSONDecodeError:
-
-        return []
-
-
-# ==========================================
-# GET ALL EVENTS
-# ==========================================
-
 @router.get("/")
-def get_events():
+def get_events(db: Session = Depends(get_db)):
+    events = db.query(Event).all()
 
-    return load_events()
+    return [
+        {
+            "id": event.id,
+            "camera_id": event.camera_id,
+            "zone_id": event.zone_id,
+            "event_type": event.event_type,
+            "track_id": event.track_id,
+            "confidence": event.confidence,
+            "severity": event.severity.value,
+            "timestamp": event.timestamp.isoformat(),
+            "snapshot_path": event.snapshot_path,
+            "status": event.status.value
+        }
+        for event in events
+    ]
 
-
-# ==========================================
-# GET SINGLE EVENT
-# ==========================================
 
 @router.get("/{event_id}")
-def get_event(event_id: int):
+def get_event(event_id: int, db: Session = Depends(get_db)):
+    event = db.query(Event).filter(Event.id == event_id).first()
 
-    events = load_events()
-
-    for event in events:
-
-        if event.get("id") == event_id:
-            return event
+    if not event:
+        raise HTTPException(
+            status_code=404,
+            detail="Event not found"
+        )
 
     return {
-        "message": "Event not found"
+        "id": event.id,
+        "camera_id": event.camera_id,
+        "zone_id": event.zone_id,
+        "event_type": event.event_type,
+        "track_id": event.track_id,
+        "confidence": event.confidence,
+        "severity": event.severity.value,
+        "timestamp": event.timestamp.isoformat(),
+        "snapshot_path": event.snapshot_path,
+        "status": event.status.value
     }
