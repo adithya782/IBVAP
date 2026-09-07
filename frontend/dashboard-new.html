@@ -1,0 +1,1625 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IBVAP | Border Surveillance Command Center</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+<style>
+body {
+    font-family: 'Inter', sans-serif;
+    background: #070b12;
+}
+
+.mono {
+    font-family: 'JetBrains Mono', monospace;
+}
+
+::-webkit-scrollbar {
+    width: 7px;
+    height: 7px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(255,255,255,0.02);
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(16,185,129,0.35);
+    border-radius: 5px;
+}
+
+.card {
+    background: rgba(255,255,255,0.035);
+    border: 1px solid rgba(255,255,255,0.08);
+}
+
+.camera-feed {
+    background:
+        linear-gradient(rgba(16,185,129,.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(16,185,129,.05) 1px, transparent 1px),
+        linear-gradient(135deg,#09131a,#101c22);
+    background-size: 35px 35px,35px 35px,100% 100%;
+}
+
+.scan-line {
+    position:absolute;
+    left:0;
+    right:0;
+    height:2px;
+    background:rgba(16,185,129,.35);
+    box-shadow:0 0 12px rgba(16,185,129,.4);
+    animation:scan 4s linear infinite;
+}
+
+@keyframes scan {
+    from { top:0%; }
+    to { top:100%; }
+}
+
+@keyframes pulse {
+    0%,100% { opacity:1; transform:scale(1); }
+    50% { opacity:.45; transform:scale(.8); }
+}
+
+.pulse {
+    animation:pulse 1.5s infinite;
+}
+
+@keyframes alertPulse {
+    0%,100% { box-shadow:0 0 0 0 rgba(239,68,68,.4); }
+    50% { box-shadow:0 0 0 7px rgba(239,68,68,0); }
+}
+
+.alert-pulse {
+    animation:alertPulse 1.4s infinite;
+}
+
+@keyframes slideIn {
+    from { opacity:0; transform:translateX(15px); }
+    to { opacity:1; transform:translateX(0); }
+}
+
+.slide-in {
+    animation:slideIn .3s ease-out;
+}
+
+.detection-box {
+    position:absolute;
+    border:2px solid;
+    pointer-events:none;
+}
+
+.track-label {
+    position:absolute;
+    top:-22px;
+    left:-2px;
+    padding:3px 6px;
+    font-size:9px;
+    font-family:'JetBrains Mono';
+    font-weight:bold;
+    white-space:nowrap;
+}
+
+.video-person {
+    position:absolute;
+    width:34px;
+    height:72px;
+    border:2px solid #22d3ee;
+}
+
+.video-person:before {
+    content:"";
+    position:absolute;
+    width:13px;
+    height:13px;
+    border:2px solid #22d3ee;
+    border-radius:50%;
+    top:-17px;
+    left:8px;
+}
+
+.zone {
+    position:absolute;
+    border:1px dashed;
+    background:rgba(16,185,129,.08);
+}
+
+.sidebar-item {
+    transition:.2s;
+}
+
+.sidebar-item:hover {
+    background:rgba(255,255,255,.06);
+}
+
+.sidebar-item.active {
+    background:rgba(16,185,129,.12);
+    color:#34d399;
+    border-left:2px solid #10b981;
+}
+
+.stat-value {
+    letter-spacing:-1px;
+}
+</style>
+
+</head>
+
+<body class="text-slate-200 min-h-screen">
+
+<!-- ================= HEADER ================= -->
+
+<header class="sticky top-0 z-50 bg-[#090d15]/90 backdrop-blur-xl border-b border-white/10">
+
+```
+<div class="max-w-[1600px] mx-auto px-5 py-3 flex items-center justify-between gap-4">
+
+    <div class="flex items-center gap-3">
+
+        <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-500 to-cyan-600 flex items-center justify-center text-xl shadow-lg shadow-emerald-500/10">
+            🛰️
+        </div>
+
+        <div>
+            <div class="font-black text-white text-base">
+                IBVAP
+            </div>
+
+            <div class="text-[10px] mono text-slate-500 uppercase tracking-wider">
+                Intelligent Border Video Analytics Platform
+            </div>
+        </div>
+
+    </div>
+
+    <div class="hidden md:flex items-center gap-5 text-xs">
+
+        <div class="text-slate-500">
+            BOP-ALPHA
+            <span class="text-slate-700">•</span>
+            SECTOR 04
+        </div>
+
+        <div class="mono text-emerald-400" id="clock">
+            --:--:--
+        </div>
+
+        <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+
+            <span class="w-1.5 h-1.5 bg-emerald-400 rounded-full pulse"></span>
+
+            ALL SYSTEMS OPERATIONAL
+
+        </div>
+
+    </div>
+
+    <div class="flex items-center gap-3">
+
+        <button
+            onclick="simulateAlert()"
+            class="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-bold hover:bg-red-500/20">
+            ⚠ Simulate Alert
+        </button>
+
+        <div class="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-cyan-500 flex items-center justify-center text-xs font-bold">
+            OP
+        </div>
+
+    </div>
+
+</div>
+```
+
+</header>
+
+<!-- ================= MAIN ================= -->
+
+<div class="max-w-[1600px] mx-auto flex">
+
+<!-- ================= SIDEBAR ================= -->
+
+<aside class="hidden lg:block w-56 border-r border-white/5 min-h-[calc(100vh-65px)] p-4 sticky top-[65px] self-start">
+
+```
+<div class="text-[9px] mono text-slate-600 uppercase mb-3 px-3">
+    Command
+</div>
+
+<nav class="space-y-1">
+
+    <a class="sidebar-item active flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs">
+        <span>▦</span>
+        Dashboard
+    </a>
+
+    <a class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs text-slate-400">
+        <span>📹</span>
+        Live Monitoring
+    </a>
+
+    <a class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs text-slate-400">
+        <span>📍</span>
+        Camera Locations
+    </a>
+
+    <a class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs text-slate-400">
+        <span>🎯</span>
+        AI Detection
+    </a>
+
+    <a class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs text-slate-400">
+        <span>🚨</span>
+        Alerts & Incidents
+    </a>
+
+    <a class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs text-slate-400">
+        <span>📜</span>
+        Event History
+    </a>
+
+</nav>
+
+
+<div class="text-[9px] mono text-slate-600 uppercase mt-7 mb-3 px-3">
+    Configuration
+</div>
+
+<nav class="space-y-1">
+
+    <a class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs text-slate-400">
+        <span>🚧</span>
+        Restricted Zones
+    </a>
+
+    <a class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs text-slate-400">
+        <span>📏</span>
+        Virtual Fences
+    </a>
+
+    <a class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs text-slate-400">
+        <span>⚙</span>
+        Settings
+    </a>
+
+</nav>
+
+
+<div class="mt-10 card rounded-xl p-3">
+
+    <div class="text-[9px] mono text-slate-600 uppercase">
+        AI Engine
+    </div>
+
+    <div class="flex items-center justify-between mt-2">
+
+        <span class="text-xs text-white">
+            YOLO + ByteTrack
+        </span>
+
+        <span class="w-2 h-2 rounded-full bg-emerald-400 pulse"></span>
+
+    </div>
+
+    <div class="text-[9px] text-emerald-400 mt-2">
+        ONLINE
+    </div>
+
+</div>
+```
+
+</aside>
+
+<!-- ================= CONTENT ================= -->
+
+<main class="flex-1 p-5 space-y-5">
+
+<!-- ================= PAGE TITLE ================= -->
+
+<div class="flex flex-wrap items-center justify-between gap-3">
+
+```
+<div>
+
+    <div class="text-[10px] mono text-emerald-400 uppercase tracking-widest">
+        Surveillance Command Center
+    </div>
+
+    <h1 class="text-2xl font-black text-white mt-1">
+        Border Sector Overview
+    </h1>
+
+</div>
+
+<div class="flex items-center gap-2">
+
+    <select class="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-slate-300">
+        <option>Last 24 Hours</option>
+        <option>Last 7 Days</option>
+        <option>Last 30 Days</option>
+    </select>
+
+    <button class="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs">
+        Export Report
+    </button>
+
+</div>
+```
+
+</div>
+
+<!-- ================= KPI ================= -->
+
+<div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+
+```
+<div class="card rounded-xl p-4">
+
+    <div class="text-[9px] mono uppercase text-slate-500">
+        Cameras Online
+    </div>
+
+    <div class="text-2xl font-black text-white stat-value mt-1">
+        6<span class="text-sm text-slate-600">/6</span>
+    </div>
+
+    <div class="text-[10px] text-emerald-400 mt-1">
+        ● All streaming
+    </div>
+
+</div>
+
+
+<div class="card rounded-xl p-4">
+
+    <div class="text-[9px] mono uppercase text-slate-500">
+        Active Tracks
+    </div>
+
+    <div id="kpiTracks" class="text-2xl font-black text-cyan-400 stat-value mt-1">
+        7
+    </div>
+
+    <div class="text-[10px] text-slate-500 mt-1">
+        Unique objects
+    </div>
+
+</div>
+
+
+<div class="card rounded-xl p-4">
+
+    <div class="text-[9px] mono uppercase text-slate-500">
+        Person
+    </div>
+
+    <div id="personCount" class="text-2xl font-black text-white stat-value mt-1">
+        12
+    </div>
+
+    <div class="text-[10px] text-cyan-400 mt-1">
+        Detected
+    </div>
+
+</div>
+
+
+<div class="card rounded-xl p-4">
+
+    <div class="text-[9px] mono uppercase text-slate-500">
+        Vehicles
+    </div>
+
+    <div id="vehicleCount" class="text-2xl font-black text-white stat-value mt-1">
+        6
+    </div>
+
+    <div class="text-[10px] text-slate-500 mt-1">
+        Cars / trucks
+    </div>
+
+</div>
+
+
+<div class="card rounded-xl p-4">
+
+    <div class="text-[9px] mono uppercase text-slate-500">
+        Active Alerts
+    </div>
+
+    <div id="kpiAlerts" class="text-2xl font-black text-emerald-400 stat-value mt-1">
+        0
+    </div>
+
+    <div id="alertStatus" class="text-[10px] text-slate-500 mt-1">
+        System nominal
+    </div>
+
+</div>
+
+
+<div class="card rounded-xl p-4">
+
+    <div class="text-[9px] mono uppercase text-slate-500">
+        Risk Level
+    </div>
+
+    <div id="riskLevel" class="text-2xl font-black text-emerald-400 stat-value mt-1">
+        LOW
+    </div>
+
+    <div class="text-[10px] text-emerald-400 mt-1">
+        Sector secure
+    </div>
+
+</div>
+```
+
+</div>
+
+<!-- ================= MAIN GRID ================= -->
+
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-5">
+
+<!-- ================= CAMERA SECTION ================= -->
+
+<div class="xl:col-span-2 space-y-5">
+
+<div class="card rounded-2xl p-5">
+
+```
+<div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+
+    <div>
+
+        <div class="font-bold text-white">
+            Live CCTV Monitoring
+        </div>
+
+        <div class="text-[10px] mono text-slate-600 mt-1">
+            AI ANALYSIS ACTIVE · 6 CAMERA STREAMS
+        </div>
+
+    </div>
+
+    <div class="flex items-center gap-3 text-[10px] mono">
+
+        <span class="text-emerald-400">
+            ● LIVE
+        </span>
+
+        <span class="text-slate-600">
+            YOLO
+        </span>
+
+        <span class="text-slate-600">
+            ByteTrack
+        </span>
+
+    </div>
+
+</div>
+
+
+<div id="cameraGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+</div>
+```
+
+</div>
+
+<!-- ================= ZONES ================= -->
+
+<div class="card rounded-2xl p-5">
+
+```
+<div class="flex justify-between items-center mb-4">
+
+    <div>
+
+        <div class="font-bold text-white">
+            Perimeter Security Zones
+        </div>
+
+        <div class="text-[10px] mono text-slate-600 mt-1">
+            VIRTUAL FENCE / RESTRICTED AREA STATUS
+        </div>
+
+    </div>
+
+</div>
+
+
+<div class="grid md:grid-cols-3 gap-3">
+
+
+    <div class="rounded-xl p-4 bg-emerald-500/5 border border-emerald-500/20">
+
+        <div class="flex justify-between">
+
+            <span class="text-xs font-bold text-white">
+                North Perimeter
+            </span>
+
+            <span class="text-[9px] text-emerald-400">
+                SECURE
+            </span>
+
+        </div>
+
+        <div class="text-[10px] mono text-slate-500 mt-2">
+            CAM-01 · Virtual Fence
+        </div>
+
+        <div class="text-[10px] text-emerald-400 mt-3">
+            ● Monitoring
+        </div>
+
+    </div>
+
+
+    <div class="rounded-xl p-4 bg-yellow-500/5 border border-yellow-500/20">
+
+        <div class="flex justify-between">
+
+            <span class="text-xs font-bold text-white">
+                River Crossing
+            </span>
+
+            <span class="text-[9px] text-yellow-400">
+                WATCH
+            </span>
+
+        </div>
+
+        <div class="text-[10px] mono text-slate-500 mt-2">
+            CAM-03 · Warning Zone
+        </div>
+
+        <div class="text-[10px] text-yellow-400 mt-3">
+            ● Increased activity
+        </div>
+
+    </div>
+
+
+    <div class="rounded-xl p-4 bg-red-500/5 border border-red-500/20">
+
+        <div class="flex justify-between">
+
+            <span class="text-xs font-bold text-white">
+                East Ridge
+            </span>
+
+            <span class="text-[9px] text-red-400">
+                RESTRICTED
+            </span>
+
+        </div>
+
+        <div class="text-[10px] mono text-slate-500 mt-2">
+            CAM-04 · Restricted Zone
+        </div>
+
+        <div class="text-[10px] text-red-400 mt-3">
+            ● Intrusion monitored
+        </div>
+
+    </div>
+
+</div>
+```
+
+</div>
+
+<!-- ================= ANALYTICS ================= -->
+
+<div class="card rounded-2xl p-5">
+
+```
+<div class="flex justify-between items-center mb-5">
+
+    <div>
+
+        <div class="font-bold text-white">
+            Events by Hour
+        </div>
+
+        <div class="text-[10px] mono text-slate-600">
+            LAST 24 HOURS
+        </div>
+
+    </div>
+
+    <div class="flex gap-3 text-[10px]">
+
+        <span class="text-emerald-400">
+            ■ Intrusion
+        </span>
+
+        <span class="text-cyan-400">
+            ■ Vehicle
+        </span>
+
+    </div>
+
+</div>
+
+<div id="barChart" class="flex items-end gap-1 h-36"></div>
+```
+
+</div>
+
+</div>
+
+<!-- ================= RIGHT PANEL ================= -->
+
+<div class="space-y-5">
+
+<!-- ================= ALERTS ================= -->
+
+<div class="card rounded-2xl p-5">
+
+```
+<div class="flex justify-between items-center mb-4">
+
+    <div class="font-bold text-white">
+        Live Alerts
+    </div>
+
+    <span id="alertPill"
+          class="text-[9px] mono px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-400">
+        0 ACTIVE
+    </span>
+
+</div>
+
+
+<div id="liveAlerts"
+     class="space-y-2 min-h-[100px] max-h-[300px] overflow-y-auto">
+
+    <div class="text-center text-sm text-slate-600 py-8">
+
+        <div class="text-2xl mb-2">
+            ✓
+        </div>
+
+        No active alerts
+        <br>
+
+        <span class="text-[10px] mono">
+            SECTOR NOMINAL
+        </span>
+
+    </div>
+
+</div>
+```
+
+</div>
+
+<!-- ================= DETECTION ================= -->
+
+<div class="card rounded-2xl p-5">
+
+```
+<div class="font-bold text-white mb-4">
+    AI Detection Breakdown
+</div>
+
+
+<div class="space-y-4">
+
+
+    <div>
+
+        <div class="flex justify-between text-xs mb-1">
+
+            <span class="text-slate-400">
+                Person
+            </span>
+
+            <span class="mono text-slate-300">
+                62%
+            </span>
+
+        </div>
+
+        <div class="h-2 bg-white/5 rounded-full">
+
+            <div class="h-full bg-emerald-400 rounded-full"
+                 style="width:62%">
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <div>
+
+        <div class="flex justify-between text-xs mb-1">
+
+            <span class="text-slate-400">
+                Vehicle
+            </span>
+
+            <span class="mono text-slate-300">
+                31%
+            </span>
+
+        </div>
+
+        <div class="h-2 bg-white/5 rounded-full">
+
+            <div class="h-full bg-cyan-400 rounded-full"
+                 style="width:31%">
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <div>
+
+        <div class="flex justify-between text-xs mb-1">
+
+            <span class="text-slate-400">
+                Animal / Other
+            </span>
+
+            <span class="mono text-slate-300">
+                7%
+            </span>
+
+        </div>
+
+        <div class="h-2 bg-white/5 rounded-full">
+
+            <div class="h-full bg-purple-400 rounded-full"
+                 style="width:7%">
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+```
+
+</div>
+
+<!-- ================= TRACKING ================= -->
+
+<div class="card rounded-2xl p-5">
+
+```
+<div class="flex justify-between items-center mb-4">
+
+    <div class="font-bold text-white">
+        Active Object Tracking
+    </div>
+
+    <span class="text-[9px] mono text-cyan-400">
+        BYTE TRACK
+    </span>
+
+</div>
+
+
+<div id="trackingList" class="space-y-2">
+</div>
+```
+
+</div>
+
+<!-- ================= RECENT EVENTS ================= -->
+
+<div class="card rounded-2xl p-5">
+
+```
+<div class="flex justify-between items-center mb-4">
+
+    <div class="font-bold text-white">
+        Recent Events
+    </div>
+
+    <button class="text-[10px] mono text-emerald-400">
+        VIEW ALL →
+    </button>
+
+</div>
+
+
+<div id="recentEvents" class="space-y-3 max-h-[260px] overflow-y-auto">
+</div>
+```
+
+</div>
+
+</div>
+
+</div>
+
+<!-- ================= FOOTER STATUS ================= -->
+
+<div class="card rounded-xl px-4 py-3 flex flex-wrap justify-between gap-3 text-[10px] mono text-slate-500">
+
+```
+<div>
+    IBVAP AI ENGINE · YOLO DETECTION · BYTETRACK TRACKING
+</div>
+
+<div class="flex gap-4">
+
+    <span class="text-emerald-400">
+        API ●
+    </span>
+
+    <span class="text-emerald-400">
+        DATABASE ●
+    </span>
+
+    <span class="text-emerald-400">
+        CCTV ●
+    </span>
+
+    <span>
+        SYSTEM v1.0
+    </span>
+
+</div>
+```
+
+</div>
+
+</main>
+
+</div>
+
+<!-- ================= JAVASCRIPT ================= -->
+
+<script>
+
+/* =====================================================
+   CLOCK
+===================================================== */
+
+function updateClock() {
+
+    const now = new Date();
+
+    document.getElementById("clock").textContent =
+        now.toTimeString().split(" ")[0];
+
+}
+
+setInterval(updateClock,1000);
+updateClock();
+
+
+/* =====================================================
+   CAMERA DATA
+===================================================== */
+
+const cameras = [
+
+    {
+        id:"CAM-01",
+        name:"North Perimeter",
+        location:"Sector 4",
+        status:"ONLINE"
+    },
+
+    {
+        id:"CAM-02",
+        name:"North Gate",
+        location:"Main Entry",
+        status:"ONLINE"
+    },
+
+    {
+        id:"CAM-03",
+        name:"River Crossing",
+        location:"River Bend",
+        status:"ONLINE"
+    },
+
+    {
+        id:"CAM-04",
+        name:"East Ridge",
+        location:"Restricted Zone",
+        status:"WEAK"
+    },
+
+    {
+        id:"CAM-05",
+        name:"Watch Tower",
+        location:"Tower 02",
+        status:"ONLINE"
+    },
+
+    {
+        id:"CAM-06",
+        name:"South Fence",
+        location:"South Boundary",
+        status:"ONLINE"
+    }
+
+];
+
+
+/* =====================================================
+   CAMERA GRID
+===================================================== */
+
+function renderCameras() {
+
+    const grid = document.getElementById("cameraGrid");
+
+    grid.innerHTML = cameras.map((cam,index) => {
+
+        return `
+
+        <div
+            class="camera-feed relative aspect-video rounded-xl overflow-hidden border border-white/10"
+            data-camera="${cam.id}">
+
+            <!-- HEADER -->
+
+            <div class="absolute top-2 left-2 right-2 z-20 flex justify-between">
+
+                <div class="flex items-center gap-2 bg-black/60 backdrop-blur px-2 py-1 rounded">
+
+                    <span class="w-1.5 h-1.5 rounded-full
+                        ${cam.status==="ONLINE" ? "bg-emerald-400" : "bg-yellow-400"}
+                        pulse">
+                    </span>
+
+                    <span class="text-[9px] mono text-white">
+                        ${cam.id}
+                    </span>
+
+                </div>
+
+                <span class="text-[8px] mono bg-black/60 px-2 py-1 rounded text-slate-400">
+                    ${cam.status}
+                </span>
+
+            </div>
+
+
+            <!-- FAKE TERRAIN -->
+
+            <div class="absolute inset-0 opacity-40">
+
+                <div class="absolute left-0 right-0 bottom-8 h-px bg-emerald-500/20"></div>
+
+                <div class="absolute left-1/4 top-0 bottom-0 w-px bg-emerald-500/10"></div>
+
+                <div class="absolute left-2/4 top-0 bottom-0 w-px bg-emerald-500/10"></div>
+
+                <div class="absolute left-3/4 top-0 bottom-0 w-px bg-emerald-500/10"></div>
+
+            </div>
+
+
+            <!-- ZONE -->
+
+            <div class="zone left-[8%] bottom-[12%] w-[38%] h-[42%] border-red-400/50">
+            </div>
+
+
+            <!-- DETECTION BOX -->
+
+            <div class="detection-box border-cyan-400"
+                 style="left:${25+index*4}%;top:40%;width:14%;height:28%;">
+
+                <div class="track-label bg-cyan-400 text-black">
+                    PERSON · #${index+12}
+                </div>
+
+            </div>
+
+
+            <!-- SECOND OBJECT -->
+
+            <div class="detection-box border-yellow-400"
+                 style="left:${60-index*3}%;top:54%;width:19%;height:17%;">
+
+                <div class="track-label bg-yellow-400 text-black">
+                    VEHICLE · #${index+31}
+                </div>
+
+            </div>
+
+
+            <!-- CROSSHAIR -->
+
+            <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-emerald-400/30 text-xl">
+                +
+            </div>
+
+
+            <!-- SCAN -->
+
+            <div class="scan-line"></div>
+
+
+            <!-- BOTTOM INFO -->
+
+            <div class="absolute bottom-0 left-0 right-0 bg-black/70 backdrop-blur px-2 py-2">
+
+                <div class="flex justify-between">
+
+                    <div>
+
+                        <div class="text-[10px] font-bold text-white">
+                            ${cam.name}
+                        </div>
+
+                        <div class="text-[8px] mono text-slate-500">
+                            ${cam.location}
+                        </div>
+
+                    </div>
+
+                    <div class="text-right">
+
+                        <div class="text-[9px] mono text-emerald-400">
+                            27 FPS
+                        </div>
+
+                        <div class="text-[8px] mono text-slate-600">
+                            AI ACTIVE
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+        `;
+
+    }).join("");
+
+}
+
+renderCameras();
+
+
+/* =====================================================
+   BAR CHART
+===================================================== */
+
+const barChart =
+    document.getElementById("barChart");
+
+const hourlyData = Array.from(
+    {length:24},
+    () => ({
+        intrusion:Math.floor(Math.random()*15)+2,
+        vehicle:Math.floor(Math.random()*10)+1
+    })
+);
+
+const maxValue = Math.max(
+    ...hourlyData.map(x =>
+        x.intrusion + x.vehicle
+    )
+);
+
+barChart.innerHTML =
+    hourlyData.map((item,index) => {
+
+        const intrusionHeight =
+            (item.intrusion/maxValue)*100;
+
+        const vehicleHeight =
+            (item.vehicle/maxValue)*100;
+
+        return `
+
+        <div class="flex-1 h-full flex flex-col-reverse gap-[2px] group">
+
+            <div
+                class="bg-emerald-400/70 rounded-b group-hover:bg-emerald-400"
+                style="height:${intrusionHeight}%">
+            </div>
+
+            <div
+                class="bg-cyan-400/70 rounded-t group-hover:bg-cyan-400"
+                style="height:${vehicleHeight}%">
+            </div>
+
+            ${
+                index % 4 === 0
+                ?
+                `<span class="text-[8px] mono text-slate-600 mt-2 text-center">
+                    ${index}:00
+                 </span>`
+                :
+                ""
+            }
+
+        </div>
+
+        `;
+
+    }).join("");
+
+
+/* =====================================================
+   ACTIVE TRACKING
+===================================================== */
+
+const trackingObjects = [
+
+    {
+        id:"TRK-012",
+        type:"PERSON",
+        camera:"CAM-01",
+        zone:"North Perimeter",
+        confidence:"96%"
+    },
+
+    {
+        id:"TRK-031",
+        type:"VEHICLE",
+        camera:"CAM-03",
+        zone:"River Crossing",
+        confidence:"91%"
+    },
+
+    {
+        id:"TRK-018",
+        type:"PERSON",
+        camera:"CAM-04",
+        zone:"East Ridge",
+        confidence:"94%"
+    },
+
+    {
+        id:"TRK-027",
+        type:"VEHICLE",
+        camera:"CAM-02",
+        zone:"North Gate",
+        confidence:"89%"
+    }
+
+];
+
+function renderTracking() {
+
+    const list =
+        document.getElementById("trackingList");
+
+    list.innerHTML =
+        trackingObjects.map(obj => `
+
+        <div class="flex items-center gap-3 p-2.5 rounded-lg bg-white/[.025] border border-white/5">
+
+            <div class="w-8 h-8 rounded-lg
+                ${
+                    obj.type==="PERSON"
+                    ? "bg-cyan-500/10 text-cyan-400"
+                    : "bg-yellow-500/10 text-yellow-400"
+                }
+                flex items-center justify-center text-xs">
+
+                ${obj.type==="PERSON" ? "👤" : "🚙"}
+
+            </div>
+
+            <div class="flex-1 min-w-0">
+
+                <div class="flex justify-between">
+
+                    <span class="text-[10px] font-bold text-white">
+                        ${obj.id}
+                    </span>
+
+                    <span class="text-[9px] text-emerald-400 mono">
+                        ${obj.confidence}
+                    </span>
+
+                </div>
+
+                <div class="text-[9px] mono text-slate-500">
+                    ${obj.type} · ${obj.camera}
+                </div>
+
+                <div class="text-[8px] text-slate-600">
+                    ${obj.zone}
+                </div>
+
+            </div>
+
+        </div>
+
+        `).join("");
+
+}
+
+renderTracking();
+
+
+/* =====================================================
+   RECENT EVENTS
+===================================================== */
+
+const recentEvents = [
+
+    {
+        type:"VEHICLE APPROACH",
+        camera:"CAM-03",
+        track:"TRK-031",
+        time:"19:55:10",
+        severity:"medium"
+    },
+
+    {
+        type:"PERSON DETECTED",
+        camera:"CAM-01",
+        track:"TRK-012",
+        time:"20:12:47",
+        severity:"low"
+    },
+
+    {
+        type:"VIRTUAL LINE CROSSING",
+        camera:"CAM-02",
+        track:"TRK-027",
+        time:"20:31:22",
+        severity:"high"
+    },
+
+    {
+        type:"LOITERING",
+        camera:"CAM-04",
+        track:"TRK-018",
+        time:"20:44:03",
+        severity:"high"
+    }
+
+];
+
+
+function renderRecentEvents() {
+
+    const container =
+        document.getElementById("recentEvents");
+
+    container.innerHTML =
+        recentEvents.map(event => `
+
+        <div class="flex gap-3 items-start">
+
+            <div class="
+                w-8 h-8 rounded-lg
+                ${
+                    event.severity==="high"
+                    ? "bg-red-500/10 text-red-400"
+                    :
+                    event.severity==="medium"
+                    ? "bg-yellow-500/10 text-yellow-400"
+                    :
+                    "bg-emerald-500/10 text-emerald-400"
+                }
+                flex items-center justify-center text-xs flex-shrink-0">
+
+                ${
+                    event.severity==="high"
+                    ? "!"
+                    : "●"
+                }
+
+            </div>
+
+            <div class="flex-1">
+
+                <div class="text-[10px] font-bold text-white">
+                    ${event.type}
+                </div>
+
+                <div class="text-[9px] mono text-slate-500">
+                    ${event.camera} · ${event.track}
+                </div>
+
+            </div>
+
+            <div class="text-[8px] mono text-slate-600">
+                ${event.time}
+            </div>
+
+        </div>
+
+        `).join("");
+
+}
+
+renderRecentEvents();
+
+
+/* =====================================================
+   ALERT SYSTEM
+===================================================== */
+
+let alertCounter = 0;
+
+function simulateAlert() {
+
+    alertCounter++;
+
+    const camera =
+        cameras[Math.floor(
+            Math.random()*cameras.length
+        )];
+
+    const track =
+        Math.floor(Math.random()*50)+1;
+
+    const now =
+        new Date()
+        .toTimeString()
+        .split(" ")[0];
+
+
+    const alerts =
+        document.getElementById("liveAlerts");
+
+
+    if (
+        alerts.innerText.includes(
+            "No active alerts"
+        )
+    ) {
+
+        alerts.innerHTML = "";
+
+    }
+
+
+    const alert =
+        document.createElement("div");
+
+    alert.id =
+        "alert-"+alertCounter;
+
+    alert.className =
+        "slide-in alert-pulse flex gap-3 items-center p-3 rounded-xl bg-red-500/10 border border-red-500/30";
+
+
+    alert.innerHTML = `
+
+        <div class="w-2 h-2 rounded-full bg-red-500 pulse flex-shrink-0">
+        </div>
+
+        <div class="flex-1">
+
+            <div class="text-[11px] font-bold text-red-400">
+                INTRUSION DETECTED
+            </div>
+
+            <div class="text-[9px] mono text-slate-500">
+                ${camera.id} · PERSON · TRACK #${track}
+            </div>
+
+            <div class="text-[8px] mono text-slate-600">
+                ${now} · RISK SCORE 80
+            </div>
+
+        </div>
+
+        <button
+            onclick="acknowledgeAlert(${alertCounter}, '${camera.id}', '${track}', '${now}')"
+            class="text-[9px] font-bold bg-white/10 hover:bg-white/20 px-2 py-1.5 rounded">
+
+            ACK
+
+        </button>
+
+    `;
+
+
+    alerts.prepend(alert);
+
+    updateAlertStatus();
+
+
+    document.getElementById("riskLevel").textContent =
+        "HIGH";
+
+    document.getElementById("riskLevel").className =
+        "text-2xl font-black text-red-400 stat-value mt-1";
+
+}
+
+
+/* =====================================================
+   ACKNOWLEDGE ALERT
+===================================================== */
+
+function acknowledgeAlert(
+    id,
+    camera,
+    track,
+    time
+) {
+
+    const alert =
+        document.getElementById(
+            "alert-"+id
+        );
+
+    if(alert) {
+
+        alert.remove();
+
+    }
+
+
+    recentEvents.unshift({
+
+        type:"INTRUSION ACKNOWLEDGED",
+        camera:camera,
+        track:"TRK-"+track,
+        time:time,
+        severity:"high"
+
+    });
+
+
+    renderRecentEvents();
+
+    updateAlertStatus();
+
+}
+
+
+/* =====================================================
+   ALERT STATUS
+===================================================== */
+
+function updateAlertStatus() {
+
+    const alerts =
+        document.getElementById("liveAlerts");
+
+    const empty =
+        alerts.innerText.includes(
+            "No active alerts"
+        );
+
+    const count =
+        empty ? 0 : alerts.children.length;
+
+
+    document.getElementById(
+        "kpiAlerts"
+    ).textContent = count;
+
+
+    document.getElementById(
+        "alertPill"
+    ).textContent =
+        count+" ACTIVE";
+
+
+    const status =
+        document.getElementById(
+            "alertStatus"
+        );
+
+
+    if(count > 0) {
+
+        document.getElementById(
+            "kpiAlerts"
+        ).className =
+            "text-2xl font-black text-red-400 stat-value mt-1";
+
+        status.textContent =
+            "Immediate attention";
+
+        status.className =
+            "text-[10px] text-red-400 mt-1";
+
+        document.getElementById(
+            "alertPill"
+        ).className =
+            "text-[9px] mono px-2 py-1 rounded-full bg-red-500/10 text-red-400";
+
+    } else {
+
+        document.getElementById(
+            "kpiAlerts"
+        ).className =
+            "text-2xl font-black text-emerald-400 stat-value mt-1";
+
+        status.textContent =
+            "System nominal";
+
+        status.className =
+            "text-[10px] text-slate-500 mt-1";
+
+        document.getElementById(
+            "alertPill"
+        ).className =
+            "text-[9px] mono px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-400";
+
+    }
+
+}
+
+
+/* =====================================================
+   SIMULATED TRACK MOVEMENT
+===================================================== */
+
+setInterval(() => {
+
+    const tracks =
+        document.getElementById(
+            "kpiTracks"
+        );
+
+    let value =
+        parseInt(tracks.textContent);
+
+    value +=
+        Math.random() > .5 ? 1 : -1;
+
+    if(value < 3) value = 3;
+
+    if(value > 15) value = 15;
+
+    tracks.textContent =
+        value;
+
+},4000);
+
+
+/* =====================================================
+   SIMULATED OBJECT COUNTS
+===================================================== */
+
+setInterval(() => {
+
+    const persons =
+        document.getElementById(
+            "personCount"
+        );
+
+    const vehicles =
+        document.getElementById(
+            "vehicleCount"
+        );
+
+
+    persons.textContent =
+        Math.floor(
+            Math.random()*8
+        )+8;
+
+
+    vehicles.textContent =
+        Math.floor(
+            Math.random()*5
+        )+3;
+
+},5000);
+
+</script>
+
+</body>
+</html>

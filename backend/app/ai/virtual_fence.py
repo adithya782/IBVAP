@@ -1,106 +1,69 @@
 import os
+
 import cv2
-import json
-import numpy as np
+import requests
+
+from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
-from app.Model.models import Camera, Zone
+from app.Model.models import Camera
 
 
 # ============================================================
-# CONFIG
+# CONFIGURATION
 # ============================================================
 
 CAMERA_NAME = os.getenv("CAMERA_NAME", "CAM-01")
 
-WINDOW_NAME = "SecureStack - Virtual Fence Editor"
+API_URL = os.getenv(
+    "API_URL",
+    "http://127.0.0.1:8000/zones/"
+)
 
-# Maximum display area
-MAX_DISPLAY_WIDTH = 1000
-MAX_DISPLAY_HEIGHT = 650
-
-
-# ============================================================
-# GLOBAL VARIABLES
-# ============================================================
-
-points = []
-
-original_width = 0
-original_height = 0
-
-display_width = 0
-display_height = 0
-
-offset_x = 0
-offset_y = 0
+WINDOW_NAME = "Virtual Border Zone Builder"
 
 
 # ============================================================
-# CALCULATE DISPLAY SIZE
+# DRAWING STATE
 # ============================================================
 
-def calculate_display_size(video_width, video_height):
-
-    scale = min(
-        MAX_DISPLAY_WIDTH / video_width,
-        MAX_DISPLAY_HEIGHT / video_height
-    )
-
-    width = int(video_width * scale)
-    height = int(video_height * scale)
-
-    return width, height
+current_points = []
 
 
 # ============================================================
 # MOUSE CALLBACK
 # ============================================================
 
-def mouse_callback(event, x, y, flags, param):
+def draw_polygon_event(event, x, y, flags, param):
 
-    global points
+    global current_points
 
-    if event != cv2.EVENT_LBUTTONDOWN:
-        return
+    # LEFT CLICK → add point
+    if event == cv2.EVENT_LBUTTONDOWN:
 
-    # Ignore clicks outside the actual video
-    if (
-        x < offset_x
-        or x >= offset_x + display_width
-        or y < offset_y
-        or y >= offset_y + display_height
-    ):
-        return
+        current_points.append((x, y))
 
-    # Convert display coordinates
-    # to original video coordinates
+        print(
+            f"Point added: ({x}, {y})"
+        )
 
-    video_x = int(
-        (x - offset_x)
-        * original_width
-        / display_width
-    )
+    # RIGHT CLICK → undo
+    elif event == cv2.EVENT_RBUTTONDOWN:
 
-    video_y = int(
-        (y - offset_y)
-        * original_height
-        / display_height
-    )
+        if current_points:
 
-    points.append([video_x, video_y])
+            removed = current_points.pop()
 
-    print(
-        f"Point {len(points)} -> "
-        f"({video_x}, {video_y})"
-    )
+            print(
+                f"Point removed: {removed}"
+            )
 
 
 # ============================================================
-# GET CAMERA FROM DATABASE
+# FETCH CAMERA FROM DATABASE
 # ============================================================
 
-db = SessionLocal()
+db: Session = SessionLocal()
 
 try:
 
@@ -111,22 +74,14 @@ try:
     )
 
     if not camera:
+
         raise RuntimeError(
-            f"Camera '{CAMERA_NAME}' not found."
+            f"Camera '{CAMERA_NAME}' "
+            "not found in database."
         )
 
-    CAMERA_ID = camera.id
-    VIDEO_SOURCE = camera.rtsp_url
-
-    print()
-    print("================================")
-    print(" SECURESTACK VIRTUAL FENCE")
-    print("================================")
-    print(f"Camera ID : {CAMERA_ID}")
-    print(f"Camera    : {CAMERA_NAME}")
-    print(f"Source    : {VIDEO_SOURCE}")
-    print("================================")
-    print()
+    camera_id = camera.id
+    video_source = camera.rtsp_url
 
 finally:
 
@@ -134,76 +89,70 @@ finally:
 
 
 # ============================================================
+# START
+# ============================================================
+
+print()
+print("=" * 60)
+print("        SECURESTACK VIRTUAL BORDER BUILDER")
+print("=" * 60)
+
+print(
+    "Camera       : "
+    f"{CAMERA_NAME}"
+)
+
+print(
+    "Camera ID    : "
+    f"{camera_id}"
+)
+
+print(
+    "Video Source : "
+    f"{video_source}"
+)
+
+print()
+print("CONTROLS")
+print("-" * 60)
+print("LEFT CLICK   → Add polygon point")
+print("RIGHT CLICK  → Remove last point")
+print("S            → Save zone")
+print("R            → Reset polygon")
+print("Q / ESC      → Quit")
+print("=" * 60)
+print()
+
+
+# ============================================================
 # OPEN VIDEO
 # ============================================================
 
-cap = cv2.VideoCapture(VIDEO_SOURCE)
+cap = cv2.VideoCapture(
+    video_source
+)
 
 if not cap.isOpened():
 
     raise RuntimeError(
-        f"Could not open video source: {VIDEO_SOURCE}"
+        f"Could not open video source: "
+        f"{video_source}"
     )
 
-
-# ============================================================
-# GET VIDEO DIMENSIONS
-# ============================================================
-
-ret, frame = cap.read()
-
-if not ret:
-
-    cap.release()
-
-    raise RuntimeError(
-        "Could not read video."
-    )
-
-
-original_height, original_width = frame.shape[:2]
-
-
-display_width, display_height = calculate_display_size(
-    original_width,
-    original_height
-)
-
-
-print(
-    f"Original video : "
-    f"{original_width} x {original_height}"
-)
-
-print(
-    f"Display size   : "
-    f"{display_width} x {display_height}"
-)
-
-
-# ============================================================
-# CREATE WINDOW
-# ============================================================
 
 cv2.namedWindow(
     WINDOW_NAME,
     cv2.WINDOW_NORMAL
 )
 
-cv2.resizeWindow(
-    WINDOW_NAME,
-    display_width,
-    display_height
-)
-
 cv2.setMouseCallback(
     WINDOW_NAME,
-    mouse_callback
+    draw_polygon_event
 )
 
 
 # ============================================================
-# MAIN LOOP
+# VIDEO LOOP
 # ============================================================
 
 while True:
@@ -212,317 +161,324 @@ while True:
 
     if not ret:
 
-        # Restart video when it reaches the end
+        # Restart video if it is a file
         cap.set(
             cv2.CAP_PROP_POS_FRAMES,
             0
         )
 
-        continue
+        ret, frame = cap.read()
 
+        if not ret:
 
-    display_frame = cv2.resize(
-        frame,
-        (display_width, display_height),
-        interpolation=cv2.INTER_AREA
-    )
+            print(
+                "⚠️ Failed to read video frame."
+            )
 
+            break
 
-    # ========================================================
+    # --------------------------------------------------------
     # DRAW POINTS
-    # ========================================================
+    # --------------------------------------------------------
 
-    for i, point in enumerate(points):
+    if current_points:
 
-        x, y = point
+        # Draw points
 
-        screen_x = int(
-            x * display_width / original_width
-        )
+        for point in current_points:
 
-        screen_y = int(
-            y * display_height / original_height
-        )
-
-        cv2.circle(
-            display_frame,
-            (screen_x, screen_y),
-            6,
-            (0, 255, 255),
-            -1
-        )
-
-        cv2.putText(
-            display_frame,
-            str(i + 1),
-            (
-                screen_x + 8,
-                screen_y - 8
-            ),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.55,
-            (0, 255, 255),
-            2
-        )
-
-
-    # ========================================================
-    # DRAW LINES
-    # ========================================================
-
-    if len(points) >= 2:
-
-        screen_points = []
-
-        for x, y in points:
-
-            screen_x = int(
-                x * display_width / original_width
+            cv2.circle(
+                frame,
+                point,
+                5,
+                (0, 255, 0),
+                -1
             )
 
-            screen_y = int(
-                y * display_height / original_height
+        # Draw connecting lines
+
+        if len(current_points) >= 2:
+
+            for i in range(
+                len(current_points) - 1
+            ):
+
+                cv2.line(
+                    frame,
+                    current_points[i],
+                    current_points[i + 1],
+                    (0, 255, 0),
+                    2
+                )
+
+        # Close polygon visually
+
+        if len(current_points) >= 3:
+
+            cv2.line(
+                frame,
+                current_points[-1],
+                current_points[0],
+                (0, 255, 255),
+                2
             )
 
-            screen_points.append(
-                [screen_x, screen_y]
-            )
-
-
-        polygon = np.array(
-            screen_points,
-            dtype=np.int32
-        )
-
-        cv2.polylines(
-            display_frame,
-            [polygon],
-            False,
-            (0, 255, 255),
-            2
-        )
-
-
-    # ========================================================
-    # DRAW CLOSED POLYGON
-    # ========================================================
-
-    if len(points) >= 3:
-
-        screen_points = []
-
-        for x, y in points:
-
-            screen_x = int(
-                x * display_width / original_width
-            )
-
-            screen_y = int(
-                y * display_height / original_height
-            )
-
-            screen_points.append(
-                [screen_x, screen_y]
-            )
-
-
-        polygon = np.array(
-            screen_points,
-            dtype=np.int32
-        )
-
-
-        # Transparent fill
-
-        overlay = display_frame.copy()
-
-        cv2.fillPoly(
-            overlay,
-            [polygon],
-            (0, 255, 255)
-        )
-
-        display_frame = cv2.addWeighted(
-            overlay,
-            0.12,
-            display_frame,
-            0.88,
-            0
-        )
-
-
-        # Polygon border
-
-        cv2.polylines(
-            display_frame,
-            [polygon],
-            True,
-            (0, 255, 255),
-            2
-        )
-
-
-    # ========================================================
-    # INSTRUCTIONS
-    # ========================================================
-
-    instruction_height = 65
-
-    cv2.rectangle(
-        display_frame,
-        (0, 0),
-        (
-            display_width,
-            instruction_height
-        ),
-        (0, 0, 0),
-        -1
-    )
-
+    # --------------------------------------------------------
+    # INFORMATION ON SCREEN
+    # --------------------------------------------------------
 
     cv2.putText(
-        display_frame,
-        "VIRTUAL FENCE EDITOR",
-        (15, 25),
+        frame,
+        "Draw ONE zone at a time",
+        (20, 30),
         cv2.FONT_HERSHEY_SIMPLEX,
-        0.65,
+        0.7,
         (255, 255, 255),
         2
     )
 
-
     cv2.putText(
-        display_frame,
-        "Click = Add Point | ENTER/S = Save | R = Reset | Q = Quit",
-        (15, 50),
+        frame,
+        "S = Save | R = Reset | Q = Quit",
+        (20, 60),
         cv2.FONT_HERSHEY_SIMPLEX,
-        0.42,
+        0.6,
         (255, 255, 255),
-        1
+        2
     )
 
-
-    # ========================================================
+    # --------------------------------------------------------
     # SHOW
-    # ========================================================
+    # --------------------------------------------------------
 
     cv2.imshow(
         WINDOW_NAME,
-        display_frame
+        frame
     )
-
-
-    # ========================================================
-    # KEYBOARD
-    # ========================================================
 
     key = cv2.waitKey(20) & 0xFF
 
-
-    # --------------------------------------------------------
+    # ========================================================
     # SAVE
-    # --------------------------------------------------------
+    # ========================================================
 
-    if key == 13 or key == ord("s"):
+    if key == ord("s") or key == ord("S"):
 
-        if len(points) < 3:
+        if len(current_points) < 3:
 
             print()
             print(
-                "❌ Need at least 3 points "
-                "to create a fence."
+                "⚠️ Need at least "
+                "3 points."
             )
 
             continue
 
-
         print()
-        print("================================")
-        print(" FENCE CREATED")
-        print("================================")
+        print("=" * 50)
+        print("          SAVE ZONE")
+        print("=" * 50)
 
         print(
-            json.dumps(
-                {
-                    "points": points
-                },
-                indent=4
-            )
+            "[1] PROXIMITY"
         )
 
+        print(
+            "    Near-border monitoring zone"
+        )
+
+        print()
+
+        print(
+            "[2] PROTECTED"
+        )
+
+        print(
+            "    Our protected area"
+        )
+
+        print("=" * 50)
+
+        choice = input(
+            "Enter choice (1 or 2): "
+        ).strip()
+
+        # ----------------------------------------------------
+        # PROXIMITY
+        # ----------------------------------------------------
+
+        if choice == "1":
+
+            zone_name = (
+                "Border Proximity Zone"
+            )
+
+            zone_type = "PROXIMITY"
+
+        # ----------------------------------------------------
+        # PROTECTED
+        # ----------------------------------------------------
+
+        elif choice == "2":
+
+            zone_name = (
+                "Protected Area"
+            )
+
+            zone_type = "PROTECTED"
+
+        # ----------------------------------------------------
+        # INVALID
+        # ----------------------------------------------------
+
+        else:
+
+            print(
+                "❌ Invalid choice."
+            )
+
+            continue
 
         # ====================================================
-        # SAVE TO DATABASE
+        # CREATE API PAYLOAD
         # ====================================================
 
-        db = SessionLocal()
+        payload = {
+
+            "camera_id": camera_id,
+
+            "name": zone_name,
+
+            "zone_type": zone_type,
+
+            "coordinates": {
+
+                "points": [
+                    [
+                        int(point[0]),
+                        int(point[1])
+                    ]
+
+                    for point in current_points
+                ]
+
+            }
+
+        }
+
+        print()
+        print(
+            "Saving zone..."
+        )
+
+        print(
+            f"Name : {zone_name}"
+        )
+
+        print(
+            f"Type : {zone_type}"
+        )
+
+        # ====================================================
+        # SEND TO FASTAPI
+        # ====================================================
 
         try:
 
-            zone = Zone(
-                camera_id=CAMERA_ID,
-
-                name="Border Restricted Zone",
-
-                zone_type="RESTRICTED",
-
-                coordinates={
-                    "points": points
-                }
+            response = requests.post(
+                API_URL,
+                json=payload,
+                timeout=5
             )
 
+            if response.status_code in (
+                200,
+                201
+            ):
 
-            db.add(zone)
+                print()
+                print(
+                    f"✅ Zone '{zone_name}' "
+                    "saved successfully!"
+                )
 
-            db.commit()
+                try:
 
-            db.refresh(zone)
+                    print(
+                        "API Response:",
+                        response.json()
+                    )
 
+                except Exception:
+
+                    pass
+
+                # Clear drawing
+
+                current_points = []
+
+                print()
+
+            else:
+
+                print()
+
+                print(
+                    "❌ Failed to save zone."
+                )
+
+                print(
+                    "HTTP Status:",
+                    response.status_code
+                )
+
+                print(
+                    "Response:",
+                    response.text
+                )
+
+        except requests.exceptions.RequestException as e:
 
             print()
-            print("✅ FENCE SAVED TO POSTGRESQL")
-            print(f"Zone ID : {zone.id}")
-            print(f"Camera  : {CAMERA_ID}")
-            print(f"Points  : {len(points)}")
-            print()
 
+            print(
+                "❌ Could not connect "
+                "to FastAPI."
+            )
 
-        except Exception as e:
+            print(
+                f"API URL: {API_URL}"
+            )
 
-            db.rollback()
+            print(
+                f"Error: {e}"
+            )
 
-            print()
-            print("❌ DATABASE ERROR")
-            print(e)
-            print()
-
-
-        finally:
-
-            db.close()
-
-
-    # --------------------------------------------------------
+    # ========================================================
     # RESET
-    # --------------------------------------------------------
+    # ========================================================
 
-    elif key == ord("r"):
+    elif key == ord("r") or key == ord("R"):
 
-        points.clear()
+        current_points = []
 
-        print()
-        print("🔄 Fence cleared.")
-        print()
+        print(
+            "🔄 Current polygon cleared."
+        )
 
-
-    # --------------------------------------------------------
+    # ========================================================
     # QUIT
-    # --------------------------------------------------------
+    # ========================================================
 
-    elif key == ord("q") or key == 27:
+    elif (
+        key == ord("q")
+        or key == 27
+    ):
 
-        print()
-        print("Exiting...")
+        print(
+            "Exiting Virtual Border Builder."
+        )
+
         break
 
 
@@ -535,4 +491,6 @@ cap.release()
 cv2.destroyAllWindows()
 
 print()
-print("Virtual Fence Editor stopped.")
+print(
+    "Virtual Border Builder closed."
+)
