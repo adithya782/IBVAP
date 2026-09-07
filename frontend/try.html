@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>IBVAP | Camera Stream & Alert Dashboard</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      body {
+        font-family: "Inter", sans-serif;
+        background: #080b12;
+      }
+      .mono {
+        font-family: "JetBrains Mono", monospace;
+      }
+
+      @keyframes pulse-dot {
+        0%,
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 0.35;
+          transform: scale(0.8);
+        }
+      }
+      .pulse-dot {
+        animation: pulse-dot 1.5s ease-in-out infinite;
+      }
+
+      @keyframes tilescan {
+        0% {
+          top: 0%;
+        }
+        100% {
+          top: 100%;
+        }
+      }
+      .tile-scan {
+        animation: tilescan 3.5s linear infinite;
+      }
+
+      .card {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      @keyframes alert-glow {
+        0%,
+        100% {
+          box-shadow: 0 0 15px rgba(239, 68, 68, 0.5);
+        }
+        50% {
+          box-shadow: 0 0 35px rgba(239, 68, 68, 0.9);
+        }
+      }
+      .alert-banner-active {
+        animation: alert-glow 1.2s ease-in-out infinite;
+      }
+    </style>
+  </head>
+
+  <body class="text-slate-200 min-h-screen relative">
+    <!-- ============ POPUP ALERT BANNER ============ -->
+    <div
+      id="alertBanner"
+      class="fixed top-6 left-1/2 -translate-x-1/2 z-50 max-w-2xl w-11/12 bg-red-600/95 backdrop-blur text-white p-4 rounded-xl shadow-2xl border-2 border-red-400 flex items-center justify-between gap-4 hidden alert-banner-active"
+    >
+      <div class="flex items-center gap-3">
+        <div
+          class="w-3.5 h-3.5 rounded-full bg-white pulse-dot flex-shrink-0"
+        ></div>
+        <div>
+          <div
+            class="font-black text-sm uppercase tracking-wider mono flex items-center gap-2"
+          >
+            🚨 NEW INTRUSION ALERT DETECTED
+          </div>
+          <div
+            id="bannerText"
+            class="text-xs font-semibold mt-0.5 text-red-100"
+          ></div>
+        </div>
+      </div>
+      <button
+        onclick="dismissAlertBanner()"
+        class="bg-black/50 hover:bg-black/80 text-white font-bold text-xs px-3 py-1.5 rounded-lg border border-white/30 transition-colors flex-shrink-0"
+      >
+        Dismiss ✕
+      </button>
+    </div>
+
+    <!-- ============ TOP BAR ============ -->
+    <header
+      class="sticky top-0 z-40 bg-[#0a0e17]/80 backdrop-blur border-b border-white/5"
+    >
+      <div
+        class="max-w-[1600px] mx-auto px-6 py-4 flex justify-between items-center"
+      >
+        <div class="flex items-center gap-3">
+          <div
+            class="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-lg"
+          >
+            🛰️
+          </div>
+          <div>
+            <div class="font-black text-white text-base leading-tight">
+              IBVAP Stream & Alert Viewer
+            </div>
+            <div class="text-[11px] mono text-slate-500">
+              Live Feeds ·
+              <span id="clock" class="text-emerald-400">--:--:--</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <button
+            onclick="triggerTestBanner()"
+            class="text-xs mono px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/30 transition-colors"
+          >
+            🧪 Test Alert Banner
+          </button>
+          <div
+            id="connStatus"
+            class="flex items-center gap-2 text-xs mono text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-full"
+          >
+            <span
+              class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot"
+            ></span>
+            CONNECTED
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main
+      class="max-w-[1600px] mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-3 gap-6"
+    >
+      <!-- LEFT COLUMN: CAMERA STREAMS -->
+      <div class="lg:col-span-2 space-y-6">
+        <div class="card rounded-2xl p-6">
+          <div class="flex justify-between items-center mb-6">
+            <div>
+              <div class="font-bold text-white text-xl">Live CCTV Feeds</div>
+              <div class="text-xs mono text-emerald-400/80">
+                CLICK FEED TO EXPAND FULLSCREEN
+              </div>
+            </div>
+          </div>
+
+          <!-- CAMERA GRID -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- CAMERA 1 -->
+            <div
+              class="relative bg-black rounded-xl overflow-hidden border border-white/10 cursor-pointer group hover:border-emerald-500/50 transition-all"
+              onclick="
+                expandCamera(
+                  'http://127.0.0.1:8000/api/cameras/1/stream',
+                  'Camera 1 - Main Entrance',
+                )
+              "
+            >
+              <div
+                class="absolute top-3 left-3 right-3 z-10 flex justify-between items-center"
+              >
+                <div
+                  class="flex items-center gap-2 bg-black/60 backdrop-blur px-2.5 py-1 rounded-md"
+                >
+                  <span
+                    class="w-2 h-2 rounded-full bg-emerald-400 pulse-dot"
+                  ></span>
+                  <span class="text-xs mono font-bold text-white"
+                    >Camera 1</span
+                  >
+                </div>
+                <span
+                  class="text-[10px] mono font-bold px-2 py-1 rounded-md bg-black/60 backdrop-blur text-emerald-400"
+                  >ONLINE</span
+                >
+              </div>
+
+              <img
+                id="camStream1"
+                src="http://127.0.0.1:8000/api/cameras/1/stream"
+                class="w-full aspect-video object-cover bg-[#0a1218]"
+                alt="Camera 1 Feed"
+                onerror="
+                  handleStreamError(
+                    this,
+                    'http://127.0.0.1:8000/api/cameras/1/stream',
+                  )
+                "
+              />
+
+              <div
+                class="absolute left-0 right-0 h-px bg-emerald-400/20 tile-scan"
+              ></div>
+
+              <div
+                class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none"
+              >
+                <span
+                  class="bg-black/70 backdrop-blur text-white text-xs mono font-bold px-3 py-1.5 rounded-lg border border-white/20"
+                >
+                  🔍 CLICK TO EXPAND
+                </span>
+              </div>
+
+              <div
+                class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent px-4 py-3 flex justify-between items-end"
+              >
+                <div>
+                  <div class="text-sm font-bold text-white leading-tight">
+                    Main Entrance
+                  </div>
+                  <div class="text-[10px] text-slate-400 mono">ID: 1</div>
+                </div>
+                <div class="text-[10px] mono text-emerald-400">
+                  AI DETECT ACTIVE
+                </div>
+              </div>
+            </div>
+
+            <!-- CAMERA 2 -->
+            <div
+              class="relative bg-black rounded-xl overflow-hidden border border-white/10 cursor-pointer group hover:border-emerald-500/50 transition-all"
+              onclick="
+                expandCamera(
+                  'http://127.0.0.1:8000/api/cameras/2/stream',
+                  'Camera 2 - Perimeter Fence',
+                )
+              "
+            >
+              <div
+                class="absolute top-3 left-3 right-3 z-10 flex justify-between items-center"
+              >
+                <div
+                  class="flex items-center gap-2 bg-black/60 backdrop-blur px-2.5 py-1 rounded-md"
+                >
+                  <span
+                    class="w-2 h-2 rounded-full bg-emerald-400 pulse-dot"
+                  ></span>
+                  <span class="text-xs mono font-bold text-white"
+                    >Camera 2</span
+                  >
+                </div>
+                <span
+                  class="text-[10px] mono font-bold px-2 py-1 rounded-md bg-black/60 backdrop-blur text-emerald-400"
+                  >ONLINE</span
+                >
+              </div>
+
+              <img
+                id="camStream2"
+                src="http://127.0.0.1:8000/api/cameras/2/stream"
+                class="w-full aspect-video object-cover bg-[#0a1218]"
+                alt="Camera 2 Feed"
+                onerror="
+                  handleStreamError(
+                    this,
+                    'http://127.0.0.1:8000/api/cameras/2/stream',
+                  )
+                "
+              />
+
+              <div
+                class="absolute left-0 right-0 h-px bg-emerald-400/20 tile-scan"
+              ></div>
+
+              <div
+                class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none"
+              >
+                <span
+                  class="bg-black/70 backdrop-blur text-white text-xs mono font-bold px-3 py-1.5 rounded-lg border border-white/20"
+                >
+                  🔍 CLICK TO EXPAND
+                </span>
+              </div>
+
+              <div
+                class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent px-4 py-3 flex justify-between items-end"
+              >
+                <div>
+                  <div class="text-sm font-bold text-white leading-tight">
+                    Perimeter Fence
+                  </div>
+                  <div class="text-[10px] text-slate-400 mono">ID: 2</div>
+                </div>
+                <div class="text-[10px] mono text-emerald-400">
+                  AI DETECT ACTIVE
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN: ALERTS & SNAPSHOTS -->
+      <div class="card rounded-2xl p-6 flex flex-col h-[700px]">
+        <div
+          class="flex justify-between items-center pb-4 border-b border-white/10 mb-4"
+        >
+          <div>
+            <div class="font-bold text-white text-lg flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-red-500 pulse-dot"></span>
+              Alert Snapshots
+            </div>
+            <div class="text-[11px] mono text-slate-400" id="alertCount">
+              FETCHING...
+            </div>
+          </div>
+          <button
+            onclick="fetchAlerts()"
+            class="text-xs mono px-2.5 py-1 rounded bg-white/5 hover:bg-white/10 text-slate-300"
+          >
+            ↻ Refresh
+          </button>
+        </div>
+
+        <div id="alertList" class="flex-1 overflow-y-auto space-y-4 pr-1">
+          <div class="text-center text-slate-500 text-sm py-10 mono">
+            Loading alert snapshots...
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- FULLSCREEN EXPANDED CAMERA MODAL -->
+    <div
+      id="cameraModal"
+      class="fixed inset-0 z-50 bg-black/90 backdrop-blur flex items-center justify-center hidden"
+      onclick="closeCameraModal()"
+    >
+      <div
+        class="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden max-w-5xl w-11/12"
+        onclick="event.stopPropagation()"
+      >
+        <div
+          class="p-4 border-b border-white/10 flex justify-between items-center bg-black/50"
+        >
+          <div
+            id="expandedCamTitle"
+            class="font-bold text-white text-sm mono"
+          ></div>
+          <button
+            onclick="closeCameraModal()"
+            class="text-slate-400 hover:text-white text-xs font-bold mono bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg"
+          >
+            ✕ CLOSE STREAM
+          </button>
+        </div>
+        <div class="relative bg-black aspect-video">
+          <img
+            id="expandedCamImg"
+            src=""
+            class="w-full h-full object-contain"
+          />
+        </div>
+      </div>
+    </div>
+
+    <!-- SNAPSHOT MODAL -->
+    <div
+      id="imageModal"
+      class="fixed inset-0 z-50 bg-black/80 backdrop-blur flex items-center justify-center hidden"
+      onclick="closeModal()"
+    >
+      <div
+        class="bg-[#0f172a] border border-white/10 rounded-2xl overflow-hidden max-w-3xl w-full mx-4"
+        onclick="event.stopPropagation()"
+      >
+        <div
+          class="p-4 border-b border-white/10 flex justify-between items-center"
+        >
+          <div id="modalTitle" class="font-bold text-white text-sm mono"></div>
+          <button
+            onclick="closeModal()"
+            class="text-slate-400 hover:text-white text-sm font-bold"
+          >
+            ✕ CLOSE
+          </button>
+        </div>
+        <img
+          id="modalImg"
+          src=""
+          class="w-full max-h-[70vh] object-contain bg-black"
+        />
+        <div
+          id="modalMeta"
+          class="p-4 bg-black/40 text-xs mono text-slate-400 flex justify-between"
+        ></div>
+      </div>
+    </div>
+
+    <script>
+      const API_BASE = "http://127.0.0.1:8000";
+
+      let maxEventId = null;
+      let alertBannerTimeout = null;
+
+      function tickClock() {
+        document.getElementById("clock").textContent = new Date()
+          .toTimeString()
+          .split(" ")[0];
+      }
+      setInterval(tickClock, 1000);
+      tickClock();
+
+      // Auto-reconnect stream softly without refreshing the entire browser page
+      function handleStreamError(imgElement, originalUrl) {
+        setTimeout(() => {
+          imgElement.src = `${originalUrl}?t=${new Date().getTime()}`;
+        }, 1500);
+      }
+
+      function formatSnapshotUrl(rawPath) {
+        if (!rawPath) return "";
+        const cleanPath = rawPath.replace(/\\/g, "/");
+        return `${API_BASE}/${cleanPath}`;
+      }
+
+      async function fetchAlerts() {
+        try {
+          const res = await fetch(`${API_BASE}/api/events/`);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+          let data = await res.json();
+          const events = Array.isArray(data)
+            ? data
+            : data.events || data.data || [];
+
+          if (events.length === 0) {
+            renderAlerts([]);
+            return;
+          }
+
+          // Ensure IDs are numeric for accurate comparison
+          events.forEach((e) => (e.id = Number(e.id)));
+
+          // Sort by ID descending (newest first)
+          events.sort((a, b) => b.id - a.id);
+
+          const latestEvent = events[0];
+
+          // 1. Initial page load: register current highest ID without alerting
+          if (maxEventId === null) {
+            maxEventId = latestEvent.id;
+          }
+          // 2. New event arrived!
+          else if (latestEvent.id > maxEventId) {
+            maxEventId = latestEvent.id;
+            triggerAlertBanner(latestEvent);
+          }
+
+          document.getElementById("alertCount").textContent =
+            `${events.length} INCIDENTS LOGGED`;
+          renderAlerts(events);
+        } catch (err) {
+          console.error("Failed to fetch events:", err);
+        }
+      }
+
+      /* ---------------- ALERT BANNER FUNCTIONS ---------------- */
+      function triggerAlertBanner(eventData) {
+        const banner = document.getElementById("alertBanner");
+        const bannerText = document.getElementById("bannerText");
+
+        bannerText.textContent = `${eventData.event_type || "INTRUSION"} on Camera #${eventData.camera_id || "1"} (Track #${eventData.track_id || "N/A"}) - Severity: ${eventData.severity || "HIGH"}`;
+
+        // Clear any existing timer if alerts come back-to-back
+        if (alertBannerTimeout) {
+          clearTimeout(alertBannerTimeout);
+        }
+
+        // Show banner
+        banner.classList.remove("hidden");
+
+        // Keep banner visible for 8 seconds before auto-hiding
+        alertBannerTimeout = setTimeout(() => {
+          dismissAlertBanner();
+        }, 8000);
+      }
+
+      function dismissAlertBanner() {
+        const banner = document.getElementById("alertBanner");
+        banner.classList.add("hidden");
+        if (alertBannerTimeout) {
+          clearTimeout(alertBannerTimeout);
+        }
+      }
+
+      function triggerTestBanner() {
+        triggerAlertBanner({
+          id: Date.now(),
+          event_type: "PERSON_INTRUSION",
+          camera_id: 1,
+          track_id: 101,
+          severity: "CRITICAL",
+        });
+      }
+
+      /* ---------------- CAMERA EXPAND FUNCTIONS ---------------- */
+      function expandCamera(streamUrl, title) {
+        document.getElementById("expandedCamImg").src = streamUrl;
+        document.getElementById("expandedCamTitle").textContent = title;
+        document.getElementById("cameraModal").classList.remove("hidden");
+      }
+
+      function closeCameraModal() {
+        document.getElementById("expandedCamImg").src = "";
+        document.getElementById("cameraModal").classList.add("hidden");
+      }
+
+      /* ---------------- ALERT RENDER ---------------- */
+      function renderAlerts(events) {
+        const list = document.getElementById("alertList");
+
+        if (events.length === 0) {
+          list.innerHTML = `<div class="text-center text-slate-500 text-sm py-10 mono">No active alerts recorded.</div>`;
+          return;
+        }
+
+        const html = events
+          .map((e) => {
+            const imgUrl = formatSnapshotUrl(e.snapshot_path);
+            const timeStr = new Date(e.timestamp).toLocaleTimeString();
+            const dateStr = new Date(e.timestamp).toLocaleDateString();
+            const confPct = Math.round((e.confidence || 0) * 100);
+
+            return `
+        <div class="bg-white/[0.02] border border-white/10 hover:border-red-500/50 transition-colors rounded-xl p-3 flex gap-3">
+            <div class="w-28 h-20 bg-black rounded-lg overflow-hidden border border-white/10 flex-shrink-0 relative group cursor-pointer"
+                 onclick="openModal('${imgUrl}', '${e.event_type} - Track #${e.track_id}', 'Cam: ${e.camera_id} | Conf: ${confPct}% | Time: ${timeStr} ${dateStr}')">
+                <img src="${imgUrl}" class="w-full h-full object-cover group-hover:scale-105 transition-transform" 
+                     onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\'text-[9px] mono text-slate-600 h-full flex items-center justify-center text-center p-1\'>NO IMAGE</div>';" />
+                <div class="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center text-[10px] font-bold text-white transition-opacity">
+                    VIEW
+                </div>
+            </div>
+
+            <div class="flex-1 min-w-0 flex flex-col justify-between">
+                <div>
+                    <div class="flex justify-between items-start gap-1">
+                        <span class="text-xs font-bold text-red-400 mono leading-tight">${e.event_type}</span>
+                        <span class="text-[9px] mono px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 font-semibold">${e.severity}</span>
+                    </div>
+                    <div class="text-[11px] text-slate-300 font-medium mt-0.5">Camera #${e.camera_id} · Track #${e.track_id}</div>
+                </div>
+
+                <div class="flex justify-between items-end text-[10px] mono text-slate-500">
+                    <span>Conf: <strong class="text-slate-300">${confPct}%</strong></span>
+                    <span>${timeStr}</span>
+                </div>
+            </div>
+        </div>`;
+          })
+          .join("");
+
+        // Only update innerHTML if it actually changed to prevent DOM flicker
+        if (list.innerHTML !== html) {
+          list.innerHTML = html;
+        }
+      }
+
+      /* ---------------- SNAPSHOT MODAL ---------------- */
+      function openModal(imgUrl, title, meta) {
+        document.getElementById("modalImg").src = imgUrl;
+        document.getElementById("modalTitle").textContent = title;
+        document.getElementById("modalMeta").textContent = meta;
+        document.getElementById("imageModal").classList.remove("hidden");
+      }
+
+      function closeModal() {
+        document.getElementById("imageModal").classList.add("hidden");
+      }
+
+      // Initial fetch and poll every 2 seconds
+      fetchAlerts();
+      setInterval(fetchAlerts, 2000);
+    </script>
+  </body>
+</html>

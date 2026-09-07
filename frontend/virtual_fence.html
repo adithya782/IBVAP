@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>IBVAP Console | Live Operations</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+<style>
+body { font-family: 'Inter', sans-serif; background:#080b12; }
+.mono { font-family: 'JetBrains Mono', monospace; }
+::-webkit-scrollbar { width: 7px; height: 7px; }
+::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); }
+::-webkit-scrollbar-thumb { background: rgba(16,185,129,0.35); border-radius: 4px; }
+
+@keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.35;transform:scale(.8)} }
+.pulse-dot{ animation:pulse-dot 1.5s ease-in-out infinite; }
+
+@keyframes ring { 0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.55)} 50%{box-shadow:0 0 0 6px rgba(239,68,68,0)} }
+.ring-alert{ animation:ring 1.4s ease-in-out infinite; }
+
+@keyframes slidein { from{opacity:0; transform:translateX(16px)} to{opacity:1; transform:translateX(0)} }
+.slide-in{ animation:slidein .35s ease-out both; }
+
+@keyframes fadein { from{opacity:0; transform:translateY(8px)} to{opacity:1; transform:translateY(0)} }
+.fade-in{ animation:fadein .3s ease-out both; }
+
+.zone-dash{ stroke-dasharray:7 5; animation:dashmove 1s linear infinite; }
+@keyframes dashmove{ to{ stroke-dashoffset:-24; } }
+
+.tile-scan{ animation:scanmove 3.5s linear infinite; }
+@keyframes scanmove{ 0%{top:0%} 100%{top:100%} }
+
+.nav-item.active { background: rgba(16,185,129,0.12); color:#34d399; border-left-color:#34d399; }
+.nav-item { border-left: 2px solid transparent; }
+
+.view { display:none; }
+.view.active { display:block; }
+
+input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; width:14px;height:14px;border-radius:50%;background:#34d399;cursor:pointer; }
+</style>
+</head>
+
+<body class="text-slate-200 h-screen overflow-hidden flex">
+
+<!-- ============ SIDEBAR ============ -->
+<aside class="w-[220px] flex-shrink-0 bg-[#0a0e17] border-r border-white/5 flex flex-col">
+    <div class="px-5 py-5 flex items-center gap-3 border-b border-white/5">
+        <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-lg">🛰️</div>
+        <div>
+            <div class="font-black text-white text-sm leading-tight">IBVAP</div>
+            <div class="text-[10px] mono text-slate-500">OPS CONSOLE</div>
+        </div>
+    </div>
+
+    <nav class="flex-1 py-4 space-y-1 overflow-y-auto">
+        <button data-view="overview" class="nav-item active w-full flex items-center gap-3 px-5 py-2.5 text-sm font-semibold text-slate-400 hover:text-white hover:bg-white/5 transition-colors">
+            <span class="text-lg">📡</span> Live Monitoring
+        </button>
+        <button data-view="events" class="nav-item w-full flex items-center gap-3 px-5 py-2.5 text-sm font-semibold text-slate-400 hover:text-white hover:bg-white/5 transition-colors">
+            <span class="text-lg">🗂️</span> Event Log
+        </button>
+        <button data-view="zones" class="nav-item w-full flex items-center gap-3 px-5 py-2.5 text-sm font-semibold text-slate-400 hover:text-white hover:bg-white/5 transition-colors">
+            <span class="text-lg">📐</span> Zone Config
+        </button>
+        <button data-view="anpr" class="nav-item w-full flex items-center gap-3 px-5 py-2.5 text-sm font-semibold text-slate-400 hover:text-white hover:bg-white/5 transition-colors">
+            <span class="text-lg">🔢</span> ANPR Log
+        </button>
+        <button data-view="analytics" class="nav-item w-full flex items-center gap-3 px-5 py-2.5 text-sm font-semibold text-slate-400 hover:text-white hover:bg-white/5 transition-colors">
+            <span class="text-lg">📊</span> Analytics
+        </button>
+        <button data-view="cameras" class="nav-item w-full flex items-center gap-3 px-5 py-2.5 text-sm font-semibold text-slate-400 hover:text-white hover:bg-white/5 transition-colors">
+            <span class="text-lg">🎥</span> Camera Health
+        </button>
+        <button data-view="settings" class="nav-item w-full flex items-center gap-3 px-5 py-2.5 text-sm font-semibold text-slate-400 hover:text-white hover:bg-white/5 transition-colors">
+            <span class="text-lg">⚙️</span> Alert Rules
+        </button>
+    </nav>
+
+    <div class="px-5 py-4 border-t border-white/5">
+        <div class="flex items-center gap-2 text-xs mono text-emerald-400 mb-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot"></span> ALL SYSTEMS OK
+        </div>
+        <div class="text-[10px] text-slate-600 mono">Sector 4 · BOP-Alpha</div>
+    </div>
+</aside>
+
+<!-- ============ MAIN ============ -->
+<div class="flex-1 flex flex-col min-w-0">
+
+    <!-- TOP BAR -->
+    <header class="h-16 flex-shrink-0 border-b border-white/5 bg-[#0a0e17]/60 backdrop-blur flex items-center justify-between px-6">
+        <div>
+            <h1 id="pageTitle" class="text-lg font-bold text-white">Live Monitoring</h1>
+            <div class="text-xs text-slate-500 mono" id="pageSub">6 cameras · 0 active alerts</div>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="relative hidden md:block">
+                <input placeholder="Search events, track ID, plate..." class="w-72 bg-white/5 border border-white/10 rounded-lg pl-9 pr-3 py-2 text-sm placeholder-slate-600 focus:outline-none focus:border-emerald-500/50">
+                <span class="absolute left-3 top-2.5 text-slate-500 text-sm">🔍</span>
+            </div>
+            <button id="bellBtn" class="relative w-10 h-10 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors">
+                🔔
+                <span id="bellBadge" class="hidden absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">0</span>
+            </button>
+            <div class="flex items-center gap-2 pl-4 border-l border-white/10">
+                <div class="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-cyan-500 flex items-center justify-center text-sm font-bold">OP</div>
+                <div class="hidden lg:block">
+                    <div class="text-xs font-bold text-white leading-tight">Operator Singh</div>
+                    <div class="text-[10px] text-slate-500">Duty Shift B</div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- CONTENT SCROLL AREA -->
+    <main class="flex-1 overflow-y-auto p-6">
+
+        <!-- ================= OVERVIEW / LIVE MONITORING ================= -->
+        <div id="view-overview" class="view active">
+            <div class="grid grid-cols-1 xl:grid-cols-4 gap-5">
+                <div class="xl:col-span-3 grid grid-cols-2 lg:grid-cols-3 gap-4" id="cameraGrid"></div>
+                <div class="space-y-4">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="bg-white/[0.03] border border-white/10 rounded-xl p-4">
+                            <div class="text-[10px] text-slate-500 uppercase mono mb-1">Cameras Online</div>
+                            <div class="text-2xl font-black text-emerald-400">6/6</div>
+                        </div>
+                        <div class="bg-white/[0.03] border border-white/10 rounded-xl p-4">
+                            <div class="text-[10px] text-slate-500 uppercase mono mb-1">Tracks Now</div>
+                            <div class="text-2xl font-black text-cyan-400" id="trackCount">7</div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white/[0.03] border border-white/10 rounded-xl p-4">
+                        <div class="flex justify-between items-center mb-3">
+                            <div class="font-bold text-white text-sm">Live Alerts</div>
+                            <span id="alertCountPill" class="text-[10px] mono px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400">0 active</span>
+                        </div>
+                        <div id="liveAlerts" class="space-y-2 min-h-[100px] max-h-[340px] overflow-y-auto">
+                            <div class="text-sm text-slate-600 text-center py-8">No active alerts.<br>System nominal.</div>
+                        </div>
+                    </div>
+
+                    <button onclick="simulateAlert()" class="w-full py-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 font-bold text-sm hover:bg-red-500/20 transition-colors">
+                        ⚠ Simulate Zone Intrusion
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= EVENT LOG ================= -->
+        <div id="view-events" class="view">
+            <div class="flex flex-wrap gap-3 mb-5">
+                <select class="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm">
+                    <option>All Cameras</option>
+                    <option>CAM-01 Sector 4</option>
+                    <option>CAM-02 North Gate</option>
+                    <option>CAM-03 River Bend</option>
+                </select>
+                <select class="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm">
+                    <option>All Event Types</option>
+                    <option>Intrusion</option>
+                    <option>Vehicle Approach</option>
+                    <option>Loitering</option>
+                </select>
+                <input type="date" class="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm">
+                <button class="ml-auto px-4 py-2 rounded-lg bg-emerald-500/15 text-emerald-400 text-sm font-bold hover:bg-emerald-500/25 transition-colors">Export CSV</button>
+            </div>
+
+            <div class="bg-white/[0.03] border border-white/10 rounded-xl overflow-hidden">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-left text-slate-500 text-xs uppercase border-b border-white/10">
+                            <th class="px-4 py-3 font-semibold">Snapshot</th>
+                            <th class="px-4 py-3 font-semibold">Event</th>
+                            <th class="px-4 py-3 font-semibold">Camera</th>
+                            <th class="px-4 py-3 font-semibold">Track ID</th>
+                            <th class="px-4 py-3 font-semibold">Timestamp</th>
+                            <th class="px-4 py-3 font-semibold">Status</th>
+                            <th class="px-4 py-3 font-semibold"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="eventTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ================= ZONE CONFIG (CONNECTED TO ZONE.PY) ================= -->
+        <div id="view-zones" class="view">
+            <div class="grid lg:grid-cols-3 gap-6">
+                <!-- CANVAS area -->
+                <div class="lg:col-span-2 bg-white/[0.03] border border-white/10 rounded-xl p-4">
+                    <div class="flex justify-between items-center mb-3">
+                        <div class="font-bold text-white text-sm">Draw Restricted Zone Boundary</div>
+                        <div class="flex gap-2">
+                            <button onclick="clearZoneDraft()" class="px-3 py-1.5 rounded-lg bg-white/5 text-xs font-bold hover:bg-white/10">Clear</button>
+                            <button onclick="saveZoneToBackend()" class="px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 text-xs font-bold hover:bg-emerald-500/30">Save Zone (API)</button>
+                        </div>
+                    </div>
+                    
+                    <!-- INPUT FORM CONTROLS -->
+                    <div class="grid grid-cols-3 gap-3 mb-3">
+                        <div>
+                            <label class="block text-[10px] text-slate-500 uppercase mono mb-1">Camera ID</label>
+                            <input id="zoneCamId" type="number" value="1" class="w-full bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white mono">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-slate-500 uppercase mono mb-1">Zone Name</label>
+                            <input id="zoneNameInput" type="text" value="North Perimeter" class="w-full bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-slate-500 uppercase mono mb-1">Zone Type</label>
+                            <select id="zoneTypeSelect" class="w-full bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white">
+                                <option value="OUR_SIDE">OUR_SIDE (Zone 1)</option>
+                                <option value="OPP_SIDE">OPP_SIDE (Zone 2)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="text-xs text-slate-500 mb-3">Click on the canvas below to place polygon points. Click "Save Zone (API)" to trigger <code class="mono text-emerald-400">POST /zones/</code>.</div>
+
+                    <svg id="zoneCanvas" viewBox="0 0 800 450" class="w-full rounded-lg bg-[#020408] cursor-crosshair border border-white/10">
+                        <defs>
+                            <linearGradient id="skyz" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="#0a1420"/><stop offset="100%" stop-color="#050a10"/>
+                            </linearGradient>
+                        </defs>
+                        <rect width="800" height="450" fill="url(#skyz)"/>
+                        <g stroke="#10b98122" stroke-width="1">
+                            <line x1="0" y1="450" x2="300" y2="220"/><line x1="800" y1="450" x2="500" y2="220"/>
+                            <line x1="0" y1="380" x2="800" y2="380"/><line x1="160" y1="280" x2="640" y2="280"/>
+                        </g>
+                        <polygon id="zonePreview" points="" fill="#ef444420" stroke="#ef4444" stroke-width="2" class="zone-dash"/>
+                        <g id="zonePoints"></g>
+                    </svg>
+                </div>
+
+                <!-- SIDEBAR: LIST FROM GET /zones/ -->
+                <div class="bg-white/[0.03] border border-white/10 rounded-xl p-4">
+                    <div class="flex justify-between items-center mb-3">
+                        <div class="font-bold text-white text-sm">Saved Database Zones</div>
+                        <button onclick="fetchZonesFromBackend()" class="text-xs text-emerald-400 hover:underline mono">↻ Refresh</button>
+                    </div>
+                    <div id="savedZonesList" class="space-y-2 max-h-[420px] overflow-y-auto">
+                        <div class="text-xs text-slate-500">Loading zones from backend...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= ANPR LOG ================= -->
+        <div id="view-anpr" class="view">
+            <div class="bg-white/[0.03] border border-white/10 rounded-xl overflow-hidden">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-left text-slate-500 text-xs uppercase border-b border-white/10">
+                            <th class="px-4 py-3 font-semibold">Plate</th>
+                            <th class="px-4 py-3 font-semibold">Camera</th>
+                            <th class="px-4 py-3 font-semibold">Confidence</th>
+                            <th class="px-4 py-3 font-semibold">Timestamp</th>
+                            <th class="px-4 py-3 font-semibold">Direction</th>
+                        </tr>
+                    </thead>
+                    <tbody class="mono">
+                        <tr class="border-b border-white/5"><td class="px-4 py-3 font-bold text-white">PB09 AK 4471</td><td class="px-4 py-3 text-slate-400">CAM-03</td><td class="px-4 py-3 text-emerald-400">96.4%</td><td class="px-4 py-3 text-slate-500">22:31:42</td><td class="px-4 py-3 text-slate-400">Inbound</td></tr>
+                        <tr class="border-b border-white/5"><td class="px-4 py-3 font-bold text-white">HR26 BQ 1123</td><td class="px-4 py-3 text-slate-400">CAM-02</td><td class="px-4 py-3 text-emerald-400">91.2%</td><td class="px-4 py-3 text-slate-500">22:14:09</td><td class="px-4 py-3 text-slate-400">Outbound</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ================= ANALYTICS ================= -->
+        <div id="view-analytics" class="view">
+            <div class="grid sm:grid-cols-3 gap-4 mb-6">
+                <div class="bg-white/[0.03] border border-white/10 rounded-xl p-5">
+                    <div class="text-xs text-slate-500 uppercase mono mb-2">Events Today</div>
+                    <div class="text-3xl font-black text-white">18</div>
+                </div>
+            </div>
+            <div class="bg-white/[0.03] border border-white/10 rounded-xl p-5">
+                <div id="barChart" class="flex items-end gap-2 h-40"></div>
+            </div>
+        </div>
+
+        <!-- ================= CAMERA HEALTH ================= -->
+        <div id="view-cameras" class="view">
+            <div id="camHealthGrid" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+        </div>
+
+        <!-- ================= SETTINGS ================= -->
+        <div id="view-settings" class="view">
+            <div class="max-w-2xl bg-white/[0.03] border border-white/10 rounded-xl p-6 space-y-5">
+                <div class="font-bold text-white text-sm">System Settings</div>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<script>
+/* ============================================================
+   CONFIG & API ENDPOINT
+   ============================================================ */
+const API_BASE_URL = "http://127.0.0.1:8000"; // Address where zone.py FastAPI app runs
+
+/* ============================================================
+   NAV SWITCHING
+   ============================================================ */
+const titles = {
+    overview: ["Live Monitoring", "6 cameras · 0 active alerts"],
+    events: ["Event Log", "History of all detected events"],
+    zones: ["Zone Configuration", "Define virtual fences per camera"],
+    anpr: ["ANPR Log", "Automatic number plate recognition results"],
+    analytics: ["Analytics", "Operational performance metrics"],
+    cameras: ["Camera Health", "Feed status and diagnostics"],
+    settings: ["Alert Rules", "Configure detection sensitivity and notifications"]
+};
+
+document.querySelectorAll('.nav-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const v = btn.dataset.view;
+        document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+        document.getElementById('view-' + v).classList.add('active');
+        document.getElementById('pageTitle').textContent = titles[v][0];
+        document.getElementById('pageSub').textContent = titles[v][1];
+
+        if (v === 'zones') {
+            fetchZonesFromBackend();
+        }
+    });
+});
+
+/* ============================================================
+   CAMERA GRID
+   ============================================================ */
+const cams = [
+    {id:'CAM-01', name:'Sector 4', status:'ok'},
+    {id:'CAM-02', name:'North Gate', status:'ok'},
+    {id:'CAM-03', name:'River Bend', status:'ok'},
+    {id:'CAM-04', name:'East Ridge', status:'ok'},
+    {id:'CAM-05', name:'Watch Tower', status:'weak'},
+    {id:'CAM-06', name:'South Fence', status:'ok'},
+];
+
+function renderCameraGrid() {
+    const grid = document.getElementById('cameraGrid');
+    if (!grid) return;
+    grid.innerHTML = cams.map((c,i) => `
+        <div class="relative bg-black rounded-xl overflow-hidden border border-white/10 group cam-tile" data-cam="${c.id}">
+            <div class="absolute top-2 left-2 z-10 flex items-center gap-1.5 bg-black/50 backdrop-blur px-2 py-1 rounded-md">
+                <span class="w-1.5 h-1.5 rounded-full ${c.status==='ok'?'bg-emerald-400':'bg-yellow-400'} pulse-dot"></span>
+                <span class="text-[10px] mono text-white">${c.id}</span>
+            </div>
+            <div class="absolute top-2 right-2 z-10 text-[10px] mono text-slate-400 bg-black/50 px-2 py-1 rounded-md">${c.name}</div>
+            <svg viewBox="0 0 400 225" class="w-full aspect-video">
+                <rect width="400" height="225" fill="#0a1218"/>
+                <g stroke="#10b98118" stroke-width="1">
+                    <line x1="0" y1="225" x2="150" y2="110"/><line x1="400" y1="225" x2="250" y2="110"/>
+                    <line x1="0" y1="190" x2="400" y2="190"/>
+                </g>
+                <rect x="${40+i*15}" y="145" width="16" height="34" fill="none" stroke="#22d3ee" stroke-width="1.5" rx="1"/>
+            </svg>
+            <div class="absolute left-0 right-0 h-px bg-emerald-400/25 tile-scan"></div>
+        </div>
+    `).join('');
+}
+renderCameraGrid();
+
+/* ============================================================
+   ZONE CONFIG & FASTAPI (zone.py) INTEGRATION
+   ============================================================ */
+let zonePoints = [];
+
+// Handle click drawing on SVG canvas
+document.getElementById('zoneCanvas').addEventListener('click', (e) => {
+    const svg = document.getElementById('zoneCanvas');
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX; 
+    pt.y = e.clientY;
+    const loc = pt.matrixTransform(svg.getScreenCTM().inverse());
+    
+    zonePoints.push([Math.round(loc.x), Math.round(loc.y)]);
+    renderZoneDraft();
+});
+
+function renderZoneDraft() {
+    const pointsStr = zonePoints.map(p => p.join(',')).join(' ');
+    document.getElementById('zonePreview').setAttribute('points', pointsStr);
+    
+    const g = document.getElementById('zonePoints');
+    g.innerHTML = zonePoints.map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="#ef4444"/>`).join('');
+}
+
+function clearZoneDraft() {
+    zonePoints = [];
+    renderZoneDraft();
+}
+
+// POST /zones/ (Maps directly to zone.py add_zone)
+async function saveZoneToBackend() {
+    if (zonePoints.length < 3) {
+        alert('Please click at least 3 points on the canvas to form a valid polygon zone.');
+        return;
+    }
+
+    const cameraId = parseInt(document.getElementById('zoneCamId').value) || 1;
+    const name = document.getElementById('zoneNameInput').value.trim() || " Perimeter Zone";
+    const zoneType = document.getElementById('zoneTypeSelect').value;
+
+    // Constructed payload matching zone.py endpoint expectation
+    const payload = {
+        camera_id: cameraId,
+        name: name,
+        zone_type: zoneType,
+        coordinates: {
+            points: zonePoints
+        }
+    };
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/zones/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+            const data = await res.json();
+            alert(`✅ ${data.message || 'Zone added successfully!'}`);
+            clearZoneDraft();
+            fetchZonesFromBackend();
+        } else {
+            const err = await res.json();
+            alert(`❌ Error saving zone: ${JSON.stringify(err)}`);
+        }
+    } catch (err) {
+        console.error("API Error:", err);
+        alert(`❌ Could not connect to FastAPI server at ${API_BASE_URL}`);
+    }
+}
+
+// GET /zones/ (Maps directly to zone.py get_zones)
+async function fetchZonesFromBackend() {
+    const list = document.getElementById('savedZonesList');
+    if (!list) return;
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/zones/`);
+        if (!res.ok) throw new Error(`HTTP Error ${res.status}`);
+
+        const zones = await res.json();
+
+        if (!zones || zones.length === 0) {
+            list.innerHTML = `<div class="text-xs text-slate-500 py-3">No zones saved in database.</div>`;
+            return;
+        }
+
+        list.innerHTML = zones.map(z => {
+            const ptsCount = z.coordinates?.points?.length || 0;
+            return `
+                <div class="p-3 rounded-lg bg-white/5 border border-white/10 fade-in">
+                    <div class="flex justify-between text-sm font-bold text-white mb-1">
+                        <span>${z.name}</span>
+                        <span class="text-emerald-400 text-xs mono">ID: #${z.id}</span>
+                    </div>
+                    <div class="text-xs text-slate-500">
+                        CAM-${z.camera_id} · ${ptsCount} points · <span class="mono text-cyan-400">${z.zone_type}</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+    } catch (err) {
+        console.error("Error fetching zones:", err);
+        list.innerHTML = `<div class="text-xs text-red-400 py-3">Failed to load zones from ${API_BASE_URL}/zones/</div>`;
+    }
+}
+
+/* ============================================================
+   SIMULATION HELPER FUNCTIONS
+   ============================================================ */
+let alertSeq = 0;
+function simulateAlert() {
+    alertSeq++;
+    const cam = cams[Math.floor(Math.random()*cams.length)];
+    const trackId = Math.floor(Math.random()*40)+1;
+    const now = new Date().toTimeString().split(' ')[0];
+
+    const alertsWrap = document.getElementById('liveAlerts');
+    if (alertsWrap.textContent.includes('No active alerts')) alertsWrap.innerHTML = '';
+
+    const el = document.createElement('div');
+    el.className = 'slide-in flex items-center gap-3 p-3 rounded-lg bg-red-500/10 border border-red-500/25';
+    el.id = 'alert-' + alertSeq;
+    el.innerHTML = `
+        <span class="w-2 h-2 rounded-full bg-red-500 pulse-dot flex-shrink-0"></span>
+        <div class="flex-1 min-w-0">
+            <div class="text-sm font-bold text-red-400">INTRUSION · ${cam.id}</div>
+            <div class="text-xs text-slate-500 mono">Track ID:${trackId} · person · ${now}</div>
+        </div>
+        <button onclick="acknowledgeAlert(${alertSeq})" class="text-xs font-bold px-2.5 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white flex-shrink-0">Ack</button>
+    `;
+    alertsWrap.prepend(el);
+}
+
+function acknowledgeAlert(id) {
+    const el = document.getElementById('alert-' + id);
+    if (el) el.remove();
+    const alertsWrap = document.getElementById('liveAlerts');
+    if (alertsWrap.children.length === 0) {
+        alertsWrap.innerHTML = '<div class="text-sm text-slate-600 text-center py-8">No active alerts.<br>System nominal.</div>';
+    }
+}
+
+// Initial fetch on page load
+fetchZonesFromBackend();
+</script>
+
+</body>
+</html>
